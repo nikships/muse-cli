@@ -59,13 +59,7 @@ random device id is generated on first run.
 
 ![how muse connects](assets/how-it-works.webp)
 
-```mermaid
-graph LR
-    CLI[muse CLI] -->|cookies + browser TLS fingerprint| Web[muse.ai HTTPS]
-    Web -->|access token → gateway token| CLI
-    CLI -->|Noise-XX WebSocket + protobuf envelopes| VM[personal VM gateway]
-    VM -->|request/response + live event streams| CLI
-```
+![muse connection flow](assets/flow.webp)
 
 See [docs/PROTOCOL.md](docs/PROTOCOL.md) for the full protocol notes, including
 the method table and the server quirks found during reverse engineering.
