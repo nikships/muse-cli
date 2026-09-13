@@ -13,7 +13,7 @@ Talk to your personal muse.ai agent from the terminal.
 
 ## What is this?
 
-A CLI that manages your personal muse.ai agent without opening a browser. Send it messages, read chats and side chats, watch live events, and manage your feed, goals, ideas, and sessions. It speaks the app's own gateway protocol directly: HTTPS auth, then an encrypted Noise-XX WebSocket to your personal VM.
+A command-line client for your personal muse.ai AI agent: chat from the terminal, automate it with scripts, and manage side chats, feed, goals, ideas, and sessions without opening a browser. It speaks the app's own gateway protocol directly: HTTPS auth, then an encrypted Noise-XX WebSocket to your personal VM.
 
 ## Quick Start
 
