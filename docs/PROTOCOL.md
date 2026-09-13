@@ -52,6 +52,15 @@ chat / feed / goals / ideas / sessions / ...
 - `chat.stream` send: `{items: [{type: "text", text}], node_id, capabilities:
   {}}` (+ `session_id` for side chats). Replies arrive as `message.assistant`
   events on the subscription.
+- The generic `/chat/subscribe` stream does not reliably deliver side-chat
+  replies, and the gateway occasionally 502s. `send` therefore treats the
+  watch as best-effort: the send itself is confirmed by stream open, and a
+  missed watch falls back to a retried `chat.history` poll on a fresh
+  connection. `history` is the source of truth, never the watch.
+- Concurrent `_read_frame` calls from two threads split frames and corrupt
+  the stateful Noise decrypt (fatal BAD_DECRYPT). `Gateway` serializes
+  receives with a lock as a backstop, but callers must still keep exactly
+  one frame consumer at a time.
 - `session.start`: `{method: "/api/session/start", params: {origin: "fresh",
   lifecycle: "persistent", title?}}`.
 - `session.rename`: flat `{session_id, title}`. pin/unpin/archive/unarchive/

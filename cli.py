@@ -149,23 +149,27 @@ def cmd_history(args):
 def cmd_send(args):
     cfg = load_config()
     gw = connect(cfg)
+    stop_evt = threading.Event()
     try:
         params = {"items": [{"type": "text", "text": args.text}],
                   "node_id": cfg["node_id"], "capabilities": {}}
         if args.thread:
             params["session_id"] = args.thread
-        # Open a live subscription first so we can watch the reply arrive.
-        q: queue_mod.Queue = queue_mod.Queue()
-        stop = False
-
-        def reader():
+        # Baseline FIRST, while this thread is the only frame consumer.
+        # (A background reader + a concurrent call_json both calling
+        # _read_frame splits frames and corrupts Noise state -> BAD_DECRYPT.)
+        baseline = 0
+        if args.wait:
             try:
-                while not stop:
-                    q.put(gw._read_frame())
-            except Exception as e:  # noqa: BLE001
-                q.put(e)
-
-        threading.Thread(target=reader, daemon=True).start()
+                h = gw.call_json("chat.history", body={"limit": 1,
+                                 **({"session_id": args.thread} if args.thread else {})})
+                evs = h.get("chat_events", [])
+                if evs:
+                    baseline = max(e.get("seq", 0) for e in evs)
+            except (GatewayError, TimeoutError):
+                pass
+        # Open a live subscription, then send. Sends only take the send
+        # lock, so they are safe while the reader below owns receives.
         from muse import ApplicationRequest, ServiceFrame
         import uuid as uuid_mod
         sub_body = json.dumps({"capabilities": {}}).encode()
@@ -178,16 +182,25 @@ def cmd_send(args):
         gw._send_envelope(0, fr.SerializeToString())
 
         stream_sid = gw._open("chat.stream", body=params)
-        baseline = 0
-        try:
-            h = gw.call_json("chat.history", body={"limit": 1,
-                             **({"session_id": args.thread} if args.thread else {})})
-            evs = h.get("chat_events", [])
-            if evs:
-                baseline = max(e.get("seq", 0) for e in evs)
-        except (GatewayError, TimeoutError):
-            pass
-        sent, bufs, reply = baseline, {}, None
+        if not args.wait:
+            out({"sent": True, "stream": stream_sid,
+                 "note": "fire-and-forget; check `muse history` for the reply"})
+            return
+
+        # Single frame consumer from here on: background reader -> queue.
+        q: queue_mod.Queue = queue_mod.Queue()
+
+        def reader():
+            try:
+                while not stop_evt.is_set():
+                    q.put(gw._read_frame())
+            except Exception as e:  # noqa: BLE001
+                if not stop_evt.is_set():
+                    q.put(e)
+
+        threading.Thread(target=reader, daemon=True).start()
+        bufs, reply = {}, None
+        watch_error = None
         deadline = time.time() + args.wait
         while time.time() < deadline:
             try:
@@ -195,7 +208,8 @@ def cmd_send(args):
             except queue_mod.Empty:
                 continue
             if isinstance(sf, Exception):
-                raise sf
+                watch_error = sf
+                break
             kind = sf.WhichOneof("kind")
             if kind == "response":
                 if sf.response.body:
@@ -221,13 +235,53 @@ def cmd_send(args):
                     break
             if reply:
                 break
-        result = {"sent": True, "stream": stream_sid}
+        result = {"sent": True, "stream": stream_sid, "subscription": sub_sid}
         if reply:
             result["reply"] = reply
-        elif args.wait:
-            result["note"] = f"no assistant reply within {args.wait}s; check `muse history`"
+        else:
+            # The send already went out before the watch; a watch failure
+            # must not look like a send failure. Park the reader, then poll
+            # history on a fresh connection (retried: the gateway
+            # occasionally 502s, and reusing this connection would race the
+            # parked reader for frames).
+            stop_evt.set()
+            hist = None
+            hist_error = None
+            for _attempt in range(3):
+                fg = None
+                try:
+                    fg = connect(cfg)
+                    try:
+                        hist = fg.call_json("chat.history", body={"limit": 5,
+                                           **({"session_id": args.thread} if args.thread else {})})
+                    finally:
+                        fg.close()
+                    break
+                except (GatewayError, TimeoutError) as e:
+                    hist_error = e
+                    time.sleep(3)
+            if hist is not None:
+                for ev in hist.get("chat_events", []):
+                    p = ev.get("payload", {}) if isinstance(ev.get("payload"), dict) else {}
+                    if ((ev.get("event") == "message.assistant")
+                            and (ev.get("seq") or 0) > baseline
+                            and isinstance(p.get("display_text"), str) and p["display_text"]):
+                        reply = fmt_event(ev)
+                        break
+                if reply:
+                    result["reply"] = reply
+                    if watch_error is not None:
+                        result["note"] = f"live watch failed ({type(watch_error).__name__}); reply recovered via history"
+                else:
+                    result["note"] = f"no assistant reply within {args.wait}s; check `muse history`"
+                    if watch_error is not None:
+                        result["watch_error"] = f"{type(watch_error).__name__}: {watch_error}"
+            else:
+                result["note"] = f"watch interrupted ({type(watch_error).__name__ if watch_error is not None else 'timeout'}); check `muse history`"
+                result["watch_error"] = f"{type(watch_error).__name__}: {watch_error}" if watch_error is not None else str(hist_error)
         out(result)
     finally:
+        stop_evt.set()
         gw.close()
 
 

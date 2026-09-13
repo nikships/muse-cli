@@ -159,6 +159,7 @@ class Gateway:
         self.noise = noise
         self.stream = 1
         self._send_lock = threading.Lock()
+        self._recv_lock = threading.Lock()
 
     # -- low-level framing -------------------------------------------------
     def _send_envelope(self, service_id, frame_bytes):
@@ -170,8 +171,13 @@ class Gateway:
             self.ws.send_bytes(bytes(self.noise.encrypt(fr.SerializeToString())))
 
     def _read_frame(self):
-        data, _flags = self.ws.recv()
-        pt = bytes(self.noise.decrypt(bytes(data)))
+        # Serialized so two threads can never interleave ws.recv / Noise
+        # decrypt (which corrupts the transport state -> BAD_DECRYPT).
+        # Callers must still avoid *logical* races: only one thread should
+        # be consuming frames at a time, or responses get misrouted.
+        with self._recv_lock:
+            data, _flags = self.ws.recv()
+            pt = bytes(self.noise.decrypt(bytes(data)))
         ntf = NoiseTransportFrame()
         ntf.ParseFromString(pt)
         sr = ServiceResponse()
