@@ -30,11 +30,14 @@ else
 fi
 
 echo "creating virtualenv and installing dependencies with uv"
-uv venv "$DEST/.venv" || fail "uv venv failed"
+if [ ! -x "$DEST/.venv/bin/python" ]; then
+  uv venv "$DEST/.venv" || fail "uv venv failed"
+fi
 uv pip install --python "$DEST/.venv/bin/python" -r "$DEST/requirements.txt" \
   || fail "uv pip install failed"
 
 mkdir -p "$BIN_DIR"
+rm -f "$BIN_DIR/$BIN_NAME"   # may be a stale symlink into the repo; cat would follow it
 cat > "$BIN_DIR/$BIN_NAME" <<EOF
 #!/usr/bin/env bash
 exec "$DEST/.venv/bin/python" "$DEST/cli.py" "\$@"
