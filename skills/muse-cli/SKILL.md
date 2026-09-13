@@ -90,8 +90,11 @@ only for methods with no wrapper.
 
 ## Gotchas
 
-- `send` returns `{"sent": true, "reply": {...}}`. If `reply` is missing after
-  `--wait`, the message still landed: confirm with `history`.
+- `send` returns `{"sent": true, "reply": {...}}`, polling history until the
+  reply lands (up to `--wait`). If `reply` is missing, the agent was slower
+  than the wait: the message still landed, confirm with `history`. The reply
+  is matched as a genuine answer, not background chatter.
+- `send --wait 0` is fire-and-forget (no polling).
 - `history` without `--thread` reads the main chat only.
 - The gateway API is unversioned. Whole classes of calls failing at once means
   the protocol drifted: see `docs/PROTOCOL.md` for the re-derivation notes,

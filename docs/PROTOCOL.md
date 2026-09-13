@@ -48,22 +48,32 @@ chat / feed / goals / ideas / sessions / ...
 ## Server quirks learned from live errors
 
 - `chat.history`: GET query params only; `transcript_mode` is rejected, omit
-  it; `session_id` scopes to a side chat; `limit` works.
-- `chat.stream` send: `{items: [{type: "text", text}], node_id, capabilities:
-  {}}` (+ `session_id` for side chats). Replies arrive as `message.assistant`
-  events on the subscription.
-- The generic `/chat/subscribe` stream does not reliably deliver side-chat
-  replies, and the gateway occasionally 502s. `send` therefore treats the
-  watch as best-effort: the send itself is confirmed by stream open, and a
-  missed watch falls back to a retried `chat.history` poll on a fresh
-  connection. `history` is the source of truth, never the watch.
+  it; `session_id` scopes to a side chat; `limit` works. History events use
+  `event_name` (`message.user` / `message.assistant`), carry the text in both
+  top-level and `payload.display_text`, and are the source of truth.
+- Genuine assistant replies have an **empty `reply_to_message_id`**; proactive
+  pushes (Telegram drafts, background task updates) are self-referential
+  there. That is how `send` tells a reply apart from background chatter.
+- Live `chat.subscribe` events use **different shapes** (`delta.text_append`
+  with `message_seq` + text chunks, `delta.message_done` with the full
+  transcript) and only cover main-chat traffic: threaded replies never arrive
+  as live events, just a `sessions.updated` snippet. `send` therefore polls
+  history instead of watching the stream. The `chat.stream` response stream
+  itself carries only the send echo, then ends.
+- `/api/session` can return 200 `{"status":"unavailable",
+  "vm_resolution_issue":{"kind":"retryable"}}` while the VM restarts. The
+  client raises a clean error (not KeyError); retry, or wake a known VM id
+  via `MUSE_VM_ID=<id> muse-cli wake`.
 - Concurrent `_read_frame` calls from two threads split frames and corrupt
   the stateful Noise decrypt (fatal BAD_DECRYPT). `Gateway` serializes
   receives with a lock as a backstop, but callers must still keep exactly
-  one frame consumer at a time.
+  one frame consumer at a time (`send` makes sequential unary calls only).
 - `session.start`: `{method: "/api/session/start", params: {origin: "fresh",
   lifecycle: "persistent", title?}}`.
 - `session.rename`: flat `{session_id, title}`. pin/unpin/archive/unarchive/
   delete: `{method: "/api/session/<op>", session_id}`.
 - `api.idea-cards.execute`: `{ideaCardId, mode: "full"}` plus path param.
 - POSTs to muse.ai need browser `Sec-Fetch-*` headers or they return 403.
+- `auth export` must focus a muse.ai tab before reading cookies (the export
+  follows the active tab) and must never overwrite a working jar without a
+  `hatch_sess` in the new one.

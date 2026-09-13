@@ -5,15 +5,13 @@ Setup:
   1. Log in to https://muse.ai/ in Chrome (Auth profile).
   2. muse auth export   # saves session cookies locally (chmod 600)
 
-Then: muse status | muse threads | muse history | muse send "hello" | ...
+Then: muse-cli status | muse-cli threads | muse-cli history | muse-cli send "hello" | ...
 """
 import argparse
 import json
 import os
 import sys
 import time
-import threading
-import queue as queue_mod
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from muse import Gateway, AuthError, GatewayError, load_cookies  # noqa: E402
@@ -47,7 +45,7 @@ def load_config():
 def connect(cfg):
     cookies = load_cookies(cfg["cookies_file"])
     if not cookies.strip():
-        raise AuthError(f"cookies file {cfg['cookies_file']} is empty; run `muse auth export`")
+        raise AuthError(f"cookies file {cfg['cookies_file']} is empty; run `muse-cli auth export`")
     return Gateway(cookies, vm_id=cfg.get("vm_id"))
 
 
@@ -55,25 +53,67 @@ def out(obj):
     print(json.dumps(obj, indent=2, ensure_ascii=False))
 
 
-def cmd_auth_export(_args):
+def _browser_run(argv):
+    """Run agent-browser, parsing its JSON envelope. NOTE: it exits 0 even
+    on failure, reporting {"success": false, "error": ...} on stdout."""
     import subprocess
+    r = subprocess.run(argv, capture_output=True, text=True)
+    if r.returncode != 0:
+        raise RuntimeError((r.stderr or r.stdout)[:200] or f"exit {r.returncode}")
+    try:
+        doc = json.loads(r.stdout)
+    except json.JSONDecodeError:
+        raise RuntimeError((r.stdout or r.stderr)[:200] or "empty output")
+    if isinstance(doc, dict) and doc.get("success") is False:
+        raise RuntimeError(str(doc.get("error") or "unknown error")[:200])
+    return doc.get("data", {}) if isinstance(doc, dict) else doc
+
+
+def _browser_cookies(headed):
+    """Read the cookie jar via agent-browser. Headed auto-connect attaches
+    to the user's real Chrome; plain mode uses a fresh browser (no login)."""
+    base = ["agent-browser"] + (["--headed", "--auto-connect"] if headed else [])
+    last_err = "unknown error"
+    for _ in range(3):
+        try:
+            if headed:
+                # Cookies follow the active tab: focus a muse.ai tab first,
+                # else the export comes back empty even when logged in.
+                data = _browser_run(base + ["tab", "list", "--json"])
+                tabs = data.get("tabs", []) if isinstance(data, dict) else []
+                muse_tabs = [t for t in tabs
+                             if isinstance(t, dict) and "muse.ai" in (t.get("url") or "")
+                             and (t.get("id") or t.get("tabId"))]
+                if not muse_tabs:
+                    return None, "no muse.ai tab open in Chrome"
+                _browser_run(base + ["tab", muse_tabs[0].get("id") or muse_tabs[0]["tabId"]])
+            data = _browser_run(base + ["cookies", "get", "--json"])
+            jar = data.get("cookies", []) if isinstance(data, dict) else []
+            return [c for c in jar if "muse.ai" in c.get("domain", "")], None
+        except RuntimeError as e:
+            last_err = str(e)
+            time.sleep(2)
+    return None, last_err
+
+
+def cmd_auth_export(_args):
     os.makedirs(CONFIG_DIR, exist_ok=True)
-    r = None
-    for argv in (["agent-browser", "cookies", "get", "--json"],
-                 ["agent-browser", "--headed", "--auto-connect", "cookies", "get", "--json"]):
-        r = subprocess.run(argv, capture_output=True, text=True)
-        if r.returncode == 0:
-            break
-    if r is None or r.returncode != 0:
-        print("cookie export failed; is Chrome running with muse.ai open?", file=sys.stderr)
+    jar, err = _browser_cookies(headed=True)
+    if jar is None and err != "no muse.ai tab open in Chrome":
+        # Headed attach failed (no Chrome, old agent-browser, ...): a plain
+        # browser shares no login, so this is a last resort at best.
+        jar, err = _browser_cookies(headed=False)
+    if jar is None:
+        print(f"cookie export failed: {err}", file=sys.stderr)
+        print("is Chrome running with muse.ai open?", file=sys.stderr)
         print("alternative: export cookies by hand, see README Setup.", file=sys.stderr)
-        if r is not None:
-            print(r.stderr[:500], file=sys.stderr)
         sys.exit(1)
-    data = json.loads(r.stdout)["data"]["cookies"]
-    jar = [c for c in data if "muse.ai" in c.get("domain", "")]
+    # Never clobber a working login with an empty or logged-out jar.
     if not any(c["name"] == "hatch_sess" for c in jar):
-        print("warning: no hatch_sess cookie found; are you logged in to muse.ai?", file=sys.stderr)
+        print("refusing to overwrite cookies: no hatch_sess in export "
+              "(are you logged in to muse.ai?). Existing file left intact.",
+              file=sys.stderr)
+        sys.exit(1)
     lines = ["# Netscape HTTP Cookie File"]
     for c in jar:
         dom = c["domain"]
@@ -82,6 +122,8 @@ def cmd_auth_export(_args):
             "TRUE" if c.get("secure") else "FALSE",
             str(int(c.get("expires", 0) or 0)), c["name"], c["value"],
         ]))
+    if os.path.exists(COOKIES_FILE):
+        os.replace(COOKIES_FILE, COOKIES_FILE + ".bak")
     with open(COOKIES_FILE, "w") as fh:
         fh.write("\n".join(lines) + "\n")
     os.chmod(COOKIES_FILE, 0o600)
@@ -146,142 +188,78 @@ def cmd_history(args):
         gw.close()
 
 
+def is_reply(ev, baseline):
+    """True for a genuine assistant reply (not a proactive push).
+
+    In history, genuine replies are message.assistant events with an empty
+    reply_to_message_id; proactive pushes (Telegram drafts, background task
+    updates) are self-referential there.
+    """
+    if ev.get("event_name") != "message.assistant":
+        return False
+    if (ev.get("seq") or 0) <= baseline:
+        return False
+    p = ev.get("payload", {}) if isinstance(ev.get("payload"), dict) else {}
+    if (ev.get("reply_to_message_id") or p.get("reply_to_message_id")):
+        return False
+    if not (p.get("display_text") or p.get("content")):
+        return False
+    if "display_text_ready" in p and not p["display_text_ready"]:
+        return False
+    return True
+
+
 def cmd_send(args):
     cfg = load_config()
     gw = connect(cfg)
-    stop_evt = threading.Event()
     try:
         params = {"items": [{"type": "text", "text": args.text}],
                   "node_id": cfg["node_id"], "capabilities": {}}
         if args.thread:
             params["session_id"] = args.thread
-        # Baseline FIRST, while this thread is the only frame consumer.
-        # (A background reader + a concurrent call_json both calling
-        # _read_frame splits frames and corrupts Noise state -> BAD_DECRYPT.)
+        # chat.history without session_id reads the main chat; with it, the
+        # thread. Either way the scope matches where the reply will land.
+        scope = {"session_id": args.thread} if args.thread else {}
         baseline = 0
-        if args.wait:
-            try:
-                h = gw.call_json("chat.history", body={"limit": 1,
-                                 **({"session_id": args.thread} if args.thread else {})})
-                evs = h.get("chat_events", [])
-                if evs:
-                    baseline = max(e.get("seq", 0) for e in evs)
-            except (GatewayError, TimeoutError):
-                pass
-        # Open a live subscription, then send. Sends only take the send
-        # lock, so they are safe while the reader below owns receives.
-        from muse import ApplicationRequest, ServiceFrame
-        import uuid as uuid_mod
-        sub_body = json.dumps({"capabilities": {}}).encode()
-        req = ApplicationRequest(verb="POST", path="/chat/subscribe", body=sub_body, end_body=True)
-        h = req.headers.add(); h.key = "x-request-id"; h.value = str(uuid_mod.uuid4())
-        h2 = req.headers.add(); h2.key = "content-type"; h2.value = "application/json"
-        fr = ServiceFrame(stream_id=gw.stream)
-        fr.request.CopyFrom(req)
-        sub_sid = gw.stream; gw.stream += 1
-        gw._send_envelope(0, fr.SerializeToString())
-
+        try:
+            h = gw.call_json("chat.history", body={"limit": 1, **scope})
+            evs = h.get("chat_events", [])
+            if evs:
+                baseline = max(e.get("seq", 0) for e in evs)
+        except (GatewayError, TimeoutError):
+            pass
         stream_sid = gw._open("chat.stream", body=params)
         if not args.wait:
             out({"sent": True, "stream": stream_sid,
-                 "note": "fire-and-forget; check `muse history` for the reply"})
+                 "note": "fire-and-forget; check `muse-cli history` for the reply"})
             return
 
-        # Single frame consumer from here on: background reader -> queue.
-        q: queue_mod.Queue = queue_mod.Queue()
-
-        def reader():
+        # The reply is picked up by polling history, not by watching the
+        # live stream: threaded replies never arrive as live events, live
+        # chat events use delta.* shapes (not message.*), and only the
+        # history shape carries the reply_to discriminator that tells
+        # genuine replies apart from proactive pushes. Sequential unary
+        # calls also mean a single frame consumer: no Noise races, ever.
+        reply, deadline = None, time.time() + args.wait
+        while time.time() < deadline and reply is None:
             try:
-                while not stop_evt.is_set():
-                    q.put(gw._read_frame())
-            except Exception as e:  # noqa: BLE001
-                if not stop_evt.is_set():
-                    q.put(e)
-
-        threading.Thread(target=reader, daemon=True).start()
-        bufs, reply = {}, None
-        watch_error = None
-        deadline = time.time() + args.wait
-        while time.time() < deadline:
-            try:
-                sf = q.get(timeout=2)
-            except queue_mod.Empty:
+                h = gw.call_json("chat.history", body={"limit": 10, **scope})
+            except (GatewayError, TimeoutError):
+                time.sleep(4)
                 continue
-            if isinstance(sf, Exception):
-                watch_error = sf
-                break
-            kind = sf.WhichOneof("kind")
-            if kind == "response":
-                if sf.response.body:
-                    bufs[sf.stream_id] = bufs.get(sf.stream_id, b"") + bytes(sf.response.body)
-            elif kind == "body_chunk":
-                bufs[sf.stream_id] = bufs.get(sf.stream_id, b"") + bytes(sf.body_chunk.data)
-            elif kind == "reset":
-                continue
-            buf = bufs.get(sf.stream_id, b"")
-            while b"\n" in buf:
-                line, buf = buf.split(b"\n", 1)
-                bufs[sf.stream_id] = buf
-                if not line.strip():
-                    continue
-                try:
-                    ev = json.loads(line)
-                except json.JSONDecodeError:
-                    continue
-                p = ev.get("payload", {}) if isinstance(ev.get("payload"), dict) else {}
-                if ev.get("event") == "message.assistant" and (ev.get("seq") or 0) > baseline \
-                        and isinstance(p.get("display_text"), str) and p["display_text"]:
+            for ev in sorted(h.get("chat_events", []), key=lambda e: e.get("seq", 0)):
+                if is_reply(ev, baseline):
                     reply = fmt_event(ev)
                     break
-            if reply:
-                break
-        result = {"sent": True, "stream": stream_sid, "subscription": sub_sid}
+            if reply is None:
+                time.sleep(4)
+        result = {"sent": True, "stream": stream_sid}
         if reply:
             result["reply"] = reply
         else:
-            # The send already went out before the watch; a watch failure
-            # must not look like a send failure. Park the reader, then poll
-            # history on a fresh connection (retried: the gateway
-            # occasionally 502s, and reusing this connection would race the
-            # parked reader for frames).
-            stop_evt.set()
-            hist = None
-            hist_error = None
-            for _attempt in range(3):
-                fg = None
-                try:
-                    fg = connect(cfg)
-                    try:
-                        hist = fg.call_json("chat.history", body={"limit": 5,
-                                           **({"session_id": args.thread} if args.thread else {})})
-                    finally:
-                        fg.close()
-                    break
-                except (GatewayError, TimeoutError) as e:
-                    hist_error = e
-                    time.sleep(3)
-            if hist is not None:
-                for ev in hist.get("chat_events", []):
-                    p = ev.get("payload", {}) if isinstance(ev.get("payload"), dict) else {}
-                    if ((ev.get("event") == "message.assistant")
-                            and (ev.get("seq") or 0) > baseline
-                            and isinstance(p.get("display_text"), str) and p["display_text"]):
-                        reply = fmt_event(ev)
-                        break
-                if reply:
-                    result["reply"] = reply
-                    if watch_error is not None:
-                        result["note"] = f"live watch failed ({type(watch_error).__name__}); reply recovered via history"
-                else:
-                    result["note"] = f"no assistant reply within {args.wait}s; check `muse history`"
-                    if watch_error is not None:
-                        result["watch_error"] = f"{type(watch_error).__name__}: {watch_error}"
-            else:
-                result["note"] = f"watch interrupted ({type(watch_error).__name__ if watch_error is not None else 'timeout'}); check `muse history`"
-                result["watch_error"] = f"{type(watch_error).__name__}: {watch_error}" if watch_error is not None else str(hist_error)
+            result["note"] = f"no assistant reply within {args.wait}s; check `muse-cli history`"
         out(result)
     finally:
-        stop_evt.set()
         gw.close()
 
 
@@ -297,7 +275,7 @@ def cmd_watch(args):
                 continue
             p = ev.get("payload", {}) if isinstance(ev.get("payload"), dict) else {}
             row = {"event": et, "seq": ev.get("seq")}
-            for k in ("display_text", "content", "activity_text", "status"):
+            for k in ("display_text", "content", "text", "activity_text", "status"):
                 if p.get(k):
                     row[k] = str(p[k])[:300]
             print(json.dumps(row, ensure_ascii=False), flush=True)
@@ -319,9 +297,7 @@ def cmd_feed(args):
                                  "title": u.get("title"),
                                  "date": day.get("local_date"),
                                  "edition": ed.get("kind")})
-                    if args.limit and len(rows) >= args.limit:
-                        break
-        out(rows)
+        out(rows[:args.limit] if args.limit else rows)
     finally:
         gw.close()
 
@@ -459,10 +435,25 @@ def cmd_wake(_args):
 
 
 def cmd_raw(args):
-    gw = connect(load_config())
+    from muse import ROUTES
+    if args.method not in ROUTES:
+        print(f"unknown method '{args.method}' (see routes.json for the 258 known methods)",
+              file=sys.stderr)
+        sys.exit(2)
     try:
         body = json.loads(args.body) if args.body else None
-        pp = dict(kv.split("=", 1) for kv in (args.param or []))
+    except json.JSONDecodeError as e:
+        print(f"invalid --body JSON: {e}", file=sys.stderr)
+        sys.exit(2)
+    pp = {}
+    for kv in (args.param or []):
+        if "=" not in kv:
+            print(f"bad --param '{kv}': expected k=v", file=sys.stderr)
+            sys.exit(2)
+        k, v = kv.split("=", 1)
+        pp[k] = v
+    gw = connect(load_config())
+    try:
         data = gw.request(args.method, path_params=pp or None, body=body,
                           query=None, timeout=args.timeout)
         try:
@@ -474,7 +465,7 @@ def cmd_raw(args):
 
 
 def main():
-    ap = argparse.ArgumentParser(prog="muse", description="CLI for your personal muse.ai agent")
+    ap = argparse.ArgumentParser(prog="muse-cli", description="CLI for your personal muse.ai agent")
     sub = ap.add_subparsers(dest="cmd", required=True)
 
     p = sub.add_parser("auth", help="auth helpers"); a = p.add_subparsers(dest="op", required=True)

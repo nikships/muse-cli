@@ -131,7 +131,17 @@ def fetch_session_info(cookies):
                impersonate="chrome", timeout=20)
     if r.status_code != 200:
         raise AuthError(f"api/session -> {r.status_code} (cookies expired? re-export)")
-    return r.json()
+    try:
+        info = r.json()
+    except ValueError:
+        raise AuthError(f"api/session returned non-JSON ({r.text[:80]!r})")
+    if "vm_id" not in info:
+        # The VM is down/restarting: {"status":"unavailable",
+        # "vm_resolution_issue":{"kind":"retryable"}}. Not an auth problem,
+        # so say so: retry, or wake a known VM id directly.
+        raise GatewayError(-1, f"VM unavailable ({info!r}); retry shortly or "
+                               "`MUSE_VM_ID=<id> muse-cli wake`")
+    return info
 
 
 class Gateway:
