@@ -76,6 +76,7 @@ the method table and the server quirks found during reverse engineering.
 
 | Resource | Description |
 |----------|-------------|
+| [skills/muse-cli/SKILL.md](skills/muse-cli/SKILL.md) | Agent skill: install check, auth setup, command reference |
 | [docs/PROTOCOL.md](docs/PROTOCOL.md) | Gateway protocol reference: auth chain, Noise transport, framing, method quirks |
 | [routes.json](routes.json) | All 258 gateway methods with paths and services |
 | `./cli.py raw --help` | Escape hatch for calling any gateway method directly |
