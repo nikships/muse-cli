@@ -1,0 +1,3 @@
+curl_cffi>=0.11
+noiseprotocol>=0.3
+protobuf>=5.0

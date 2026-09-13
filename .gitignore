@@ -1,0 +1,14 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+*.egg-info/
+
+# Local secrets and state (never commit)
+cookies.txt
+agent-cookies.json
+config.json
+*.har
+
+# OS
+.DS_Store
