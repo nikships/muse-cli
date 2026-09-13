@@ -45,8 +45,8 @@ EOF
 chmod +x "$BIN_DIR/$BIN_NAME"
 echo "launcher installed at $BIN_DIR/$BIN_NAME"
 
-mkdir -p "$SKILL_DIR"
-cp -r "$DEST/skills/muse-cli" "$SKILL_DIR/muse-cli"
+mkdir -p "$SKILL_DIR/muse-cli"
+cp -r "$DEST/skills/muse-cli/." "$SKILL_DIR/muse-cli/"
 echo "skill installed at $SKILL_DIR/muse-cli"
 
 echo
