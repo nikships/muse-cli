@@ -32,8 +32,16 @@ muse-cli auth export
 muse-cli status
 ```
 
-Prefer manual setup? Clone, `pip install -r requirements.txt`, link `cli.py`
-somewhere on PATH (call it `muse-cli`; `muse` clashes with Muse Code).
+Prefer manual setup? Everything runs on uv:
+
+```bash
+git clone https://github.com/nikships/muse-cli.git
+cd muse-cli
+uv venv && uv pip install -r requirements.txt
+```
+
+Then either use `uv run cli.py ...` from the checkout, or link it somewhere on
+PATH as `muse-cli` (`muse` clashes with Muse Code).
 
 Tip: `muse-cli` is on PATH after install. If you set up manually, add it
 under a non-clashing name (`muse` is taken by Muse Code on many machines):

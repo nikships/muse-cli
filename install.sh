@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# muse-cli installer: CLI + agent skill, no browser needed afterwards.
+# muse-cli installer: CLI + agent skill, powered by uv. No browser needed afterwards.
 # Usage: curl -fsSL https://raw.githubusercontent.com/nikships/muse-cli/main/install.sh | bash
 set -u
 
@@ -12,7 +12,14 @@ SKILL_DIR="${MUSE_CLI_SKILLS:-$HOME/.agents/skills}"
 fail() { echo "install failed: $1" >&2; exit 1; }
 
 command -v git >/dev/null || fail "git not found"
-command -v python3 >/dev/null || fail "python3 not found"
+command -v curl >/dev/null || fail "curl not found"
+
+if ! command -v uv >/dev/null; then
+  echo "installing uv"
+  curl -fsSL https://astral.sh/uv/install.sh | sh || fail "uv install failed"
+  export PATH="$HOME/.local/bin:$PATH"
+fi
+command -v uv >/dev/null || fail "uv not found after install"
 
 if [ -d "$DEST/.git" ]; then
   echo "updating existing checkout at $DEST"
@@ -22,17 +29,18 @@ else
   git clone "$REPO_URL" "$DEST" || fail "git clone failed"
 fi
 
-echo "installing python dependencies"
-if ! python3 -m pip install -r "$DEST/requirements.txt" 2>/dev/null; then
-  echo "(system python is protected, retrying with --user)"
-  python3 -m pip install --user -r "$DEST/requirements.txt" 2>/dev/null \
-  || python3 -m pip install --user --break-system-packages -r "$DEST/requirements.txt" \
-  || fail "pip install failed"
-fi
+echo "creating virtualenv and installing dependencies with uv"
+uv venv "$DEST/.venv" || fail "uv venv failed"
+uv pip install --python "$DEST/.venv/bin/python" -r "$DEST/requirements.txt" \
+  || fail "uv pip install failed"
 
 mkdir -p "$BIN_DIR"
-ln -sf "$DEST/cli.py" "$BIN_DIR/$BIN_NAME"
-echo "linked $BIN_DIR/$BIN_NAME"
+cat > "$BIN_DIR/$BIN_NAME" <<EOF
+#!/usr/bin/env bash
+exec "$DEST/.venv/bin/python" "$DEST/cli.py" "\$@"
+EOF
+chmod +x "$BIN_DIR/$BIN_NAME"
+echo "launcher installed at $BIN_DIR/$BIN_NAME"
 
 mkdir -p "$SKILL_DIR"
 cp -r "$DEST/skills/muse-cli" "$SKILL_DIR/muse-cli"

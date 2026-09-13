@@ -19,15 +19,16 @@ prints JSON.
 curl -fsSL https://raw.githubusercontent.com/nikships/muse-cli/main/install.sh | bash
 ```
 
-This installs the CLI, its Python dependencies, and this skill (to
-`~/.agents/skills/muse-cli`). Prefer manual setup? Clone
-https://github.com/nikships/muse-cli.git to `~/muse-cli`, run `pip install -r
-~/muse-cli/requirements.txt`, and link `cli.py` as `~/bin/muse-cli` (`muse`
-clashes with Muse Code, don't use it). Verify before continuing:
+This installs the CLI with uv (bringing its own virtualenv), its Python
+dependencies, and this skill (to `~/.agents/skills/muse-cli`). Prefer manual
+setup? Clone https://github.com/nikships/muse-cli.git to `~/muse-cli`, run
+`uv venv && uv pip install -r requirements.txt` there, and link `cli.py` as
+`~/bin/muse-cli` (`muse` clashes with Muse Code, don't use it). Verify before
+continuing:
 
 ```bash
 command -v muse-cli
-python3 -c "import curl_cffi, noise, google.protobuf" && echo deps-ok
+muse-cli --help >/dev/null && echo cli-ok   # proves the venv + deps resolve
 ```
 
 ## 2. Auth
