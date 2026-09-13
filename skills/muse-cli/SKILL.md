@@ -5,50 +5,59 @@ description: Manage a personal muse.ai agent from the terminal (send messages, r
 
 # muse-cli: drive a muse.ai personal agent from the terminal
 
+Assume a bare machine: only this skill is present. No repo clone, no
+dependencies, no auth. Work top to bottom; stop at the first step that
+fails and report it.
+
 The repo ships a CLI (`cli.py`) that talks to the muse.ai personal gateway
 directly. No browser needed after the one-time cookie export. Every command
 prints JSON.
 
-## 0. Quick check: is it ready?
-
-```bash
-command -v muse-cli || ls ~/muse-cli/cli.py            # installed?
-python3 -c "import curl_cffi, noise, google.protobuf"  # deps?
-test -s ~/.config/muse-cli/cookies.txt && echo auth-ok # auth?
-```
-
-- CLI missing → follow **Install** below, then re-run this check.
-- Deps missing → `pip install -r <repo>/requirements.txt`.
-- Auth missing/expired (commands fail with `auth error`) → follow **Auth**.
-
-## Install
+## 1. Install
 
 ```bash
 git clone https://github.com/nikships/muse-cli.git ~/muse-cli
 pip install -r ~/muse-cli/requirements.txt
 ln -s ~/muse-cli/cli.py ~/bin/muse-cli   # 'muse' clashes with Muse Code, don't use it
-muse-cli status                          # verifies install + auth together
+export PATH="$HOME/bin:$PATH"
 ```
 
-## Auth
-
-One-time per browser login. The user must be logged in to https://muse.ai/
-in Chrome first.
+If `~/bin` is not on PATH, use `~/muse-cli/cli.py` directly in every command
+below. Verify before continuing:
 
 ```bash
-muse-cli auth export     # pulls muse.ai cookies via agent-browser into ~/.config/muse-cli/cookies.txt (0600)
+command -v muse-cli
+python3 -c "import curl_cffi, noise, google.protobuf" && echo deps-ok
 ```
 
-No Chrome or no agent-browser? Copy the `muse.ai` cookies by hand (DevTools →
-Application → Cookies; needs `hatch_sess`) into `~/.config/muse-cli/cookies.txt`
-as Netscape-jar or `name=value; ...` text. Access and gateway tokens are
-fetched fresh on every run; only cookies persist. When commands fail with
-`auth error`, cookies expired: re-run `auth export`.
+## 2. Auth
+
+The user must be logged in to https://muse.ai/ in Chrome first. Then:
+
+```bash
+muse-cli auth export     # saves muse.ai cookies to ~/.config/muse-cli/cookies.txt (0600)
+test -s ~/.config/muse-cli/cookies.txt && echo auth-ok
+```
+
+`auth export` pulls cookies from a running Chrome via
+[agent-browser](https://github.com/nikships/foundry) (`npm i -g agent-browser`
+if it is missing). No Chrome? Copy the `muse.ai` cookies by hand (DevTools →
+Application → Cookies; needs `hatch_sess`) into
+`~/.config/muse-cli/cookies.txt` as Netscape-jar or `name=value; ...` text.
+
+Access and gateway tokens are fetched fresh on every run; only cookies
+persist. When commands later fail with `auth error`, cookies expired:
+re-run `auth export`.
+
+## 3. Verify end to end
+
+```bash
+muse-cli status    # VM id, chat count, unread, identity: install + auth proven
+```
 
 ## Everyday commands
 
 ```bash
-muse-cli status
 muse-cli threads                                        # main chat + side chats (session_ids)
 muse-cli history --limit 5                              # recent main-chat messages
 muse-cli history --thread <session-id> --limit 5        # one side chat
