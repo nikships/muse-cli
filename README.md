@@ -29,6 +29,14 @@ pip install -r requirements.txt
 ./cli.py status
 ```
 
+Tip: add it to your PATH under a non-clashing name (`muse` is taken by
+Muse Code on many machines):
+
+```bash
+ln -s "$PWD/cli.py" ~/bin/muse-cli
+muse-cli status
+```
+
 ## Usage
 
 ```bash
