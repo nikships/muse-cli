@@ -18,19 +18,25 @@ A CLI that manages your personal muse.ai agent without opening a browser. Send i
 ## Quick Start
 
 ```bash
-git clone https://github.com/nikships/muse-cli.git
-cd muse-cli
-pip install -r requirements.txt
-
-# 1. Log in to https://muse.ai/ in Chrome
-# 2. Export your session (one time; re-run when it expires):
-./cli.py auth export
-
-./cli.py status
+curl -fsSL https://raw.githubusercontent.com/nikships/muse-cli/main/install.sh | bash
 ```
 
-Tip: add it to your PATH under a non-clashing name (`muse` is taken by
-Muse Code on many machines):
+This installs the CLI, its Python dependencies, and the agent skill (to
+`~/.agents/skills/muse-cli`). Then:
+
+```bash
+# 1. Log in to https://muse.ai/ in Chrome
+# 2. Export your session (one time; re-run when it expires):
+muse-cli auth export
+
+muse-cli status
+```
+
+Prefer manual setup? Clone, `pip install -r requirements.txt`, link `cli.py`
+somewhere on PATH (call it `muse-cli`; `muse` clashes with Muse Code).
+
+Tip: `muse-cli` is on PATH after install. If you set up manually, add it
+under a non-clashing name (`muse` is taken by Muse Code on many machines):
 
 ```bash
 ln -s "$PWD/cli.py" ~/bin/muse-cli

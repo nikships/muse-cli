@@ -16,14 +16,14 @@ prints JSON.
 ## 1. Install
 
 ```bash
-git clone https://github.com/nikships/muse-cli.git ~/muse-cli
-pip install -r ~/muse-cli/requirements.txt
-ln -s ~/muse-cli/cli.py ~/bin/muse-cli   # 'muse' clashes with Muse Code, don't use it
-export PATH="$HOME/bin:$PATH"
+curl -fsSL https://raw.githubusercontent.com/nikships/muse-cli/main/install.sh | bash
 ```
 
-If `~/bin` is not on PATH, use `~/muse-cli/cli.py` directly in every command
-below. Verify before continuing:
+This installs the CLI, its Python dependencies, and this skill (to
+`~/.agents/skills/muse-cli`). Prefer manual setup? Clone
+https://github.com/nikships/muse-cli.git to `~/muse-cli`, run `pip install -r
+~/muse-cli/requirements.txt`, and link `cli.py` as `~/bin/muse-cli` (`muse`
+clashes with Muse Code, don't use it). Verify before continuing:
 
 ```bash
 command -v muse-cli
