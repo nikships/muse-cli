@@ -38,7 +38,7 @@ to `~/.agents/skills/muse-cli`:
 curl -fsSL https://raw.githubusercontent.com/nikships/muse-cli/main/install.sh | bash
 ```
 
-Upgrade with `uv tool upgrade muse-cli`, remove with `uv tool uninstall muse-cli`.
+Upgrade with `muse-cli update`. In a terminal it also checks PyPI once a day and, when a newer release exists, prints that command on stderr. It does not upgrade itself. Set `MUSE_NO_UPDATE_CHECK=1` to silence the notice. The check stays quiet when output is piped or `CI` is set. Remove with `uv tool uninstall muse-cli`.
 
 Logging in is a separate one-time step. Chrome shares its cookies after you
 turn on remote debugging. Follow [Log in once](#log-in-once) before running

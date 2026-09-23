@@ -95,6 +95,9 @@ echo "    chmod 600 ~/.config/muse-cli/cookies.txt"
 echo "    $BIN_NAME status"
 echo
 echo "Full write-up: https://github.com/nikships/muse-cli#log-in-once"
+echo
+echo "Updates: in a terminal, $BIN_NAME notices a newer PyPI release once a day."
+echo "Upgrade with: $BIN_NAME update"
 case ":$PATH:" in
   *":$BIN_DIR:"*) ;;
   *) echo "NOTE: $BIN_DIR is not on your PATH; run 'uv tool update-shell' or use $BIN_DIR/$BIN_NAME" ;;

@@ -17,6 +17,7 @@ import time
 
 from . import __version__
 from .gateway import Gateway, AuthError, GatewayError, load_cookies
+from .update import cmd_update, finish_update_check, start_update_check
 
 CONFIG_DIR = os.path.expanduser("~/.config/muse-cli")
 CONFIG_FILE = os.path.join(CONFIG_DIR, "config.json")
@@ -655,23 +656,30 @@ def main():
             p.add_argument("title")
         p.set_defaults(fn=cmd_session_op(kind))
     sub.add_parser("wake", help="request a VM wake").set_defaults(fn=cmd_wake)
+    sub.add_parser("update", help="upgrade this install to the latest release").set_defaults(fn=cmd_update)
     p = sub.add_parser("raw", help="call any gateway method (escape hatch)")
     p.add_argument("method"); p.add_argument("--body", default=None)
     p.add_argument("--param", action="append", default=[], help="path param k=v (repeatable)")
     p.add_argument("--timeout", type=int, default=30); p.set_defaults(fn=cmd_raw)
 
     args = ap.parse_args()
+    # A piped command prints JSON. The notice stays off unless both streams
+    # are a terminal, and `update` is already doing the upgrade.
+    notice = None if args.cmd == "update" else start_update_check()
     try:
-        args.fn(args)
-    except AuthError as e:
-        print(f"auth error: {e}", file=sys.stderr)
-        sys.exit(2)
-    except GatewayError as e:
-        print(f"gateway error: {e}", file=sys.stderr)
-        sys.exit(3)
-    except TimeoutError as e:
-        print(f"timeout: {e}", file=sys.stderr)
-        sys.exit(4)
+        try:
+            args.fn(args)
+        except AuthError as e:
+            print(f"auth error: {e}", file=sys.stderr)
+            sys.exit(2)
+        except GatewayError as e:
+            print(f"gateway error: {e}", file=sys.stderr)
+            sys.exit(3)
+        except TimeoutError as e:
+            print(f"timeout: {e}", file=sys.stderr)
+            sys.exit(4)
+    finally:
+        finish_update_check(notice)
 
 
 if __name__ == "__main__":
