@@ -32,18 +32,20 @@ muse-cli --help >/dev/null && echo cli-ok   # proves the install + deps resolve
 
 ## 2. Auth
 
-The user must be logged in to https://muse.ai/ in Chrome first. Then:
+The user must be logged in to https://muse.ai/ in Chrome first. `auth export`
+reads Chrome's cookies through
+[agent-browser](https://github.com/nikships/foundry); install it if missing,
+then:
 
 ```bash
+npm i -g agent-browser   # one-time; skip if already installed
 muse-cli auth export     # saves muse.ai cookies to ~/.config/muse-cli/cookies.txt (0600)
 test -s ~/.config/muse-cli/cookies.txt && echo auth-ok
 ```
 
-`auth export` pulls cookies from a running Chrome via
-[agent-browser](https://github.com/nikships/foundry) (`npm i -g agent-browser`
-if it is missing). No Chrome? Copy the `muse.ai` cookies by hand (DevTools →
-Application → Cookies; needs `hatch_sess`) into
-`~/.config/muse-cli/cookies.txt` as Netscape-jar or `name=value; ...` text.
+No Chrome? Copy the `muse.ai` cookies by hand (DevTools → Application →
+Cookies; needs `hatch_sess`) into `~/.config/muse-cli/cookies.txt` as
+Netscape-jar or `name=value; ...` text.
 
 Access and gateway tokens are fetched fresh on every run; only cookies
 persist. When commands later fail with `auth error`, cookies expired:

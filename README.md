@@ -32,8 +32,10 @@ uv tool install muse-cli      # or: pipx install muse-cli   /   pip install muse
 Then log in and check the connection:
 
 ```bash
-# 1. Log in to https://muse.ai/ in Chrome
-# 2. Export your session (one time; re-run when it expires):
+# 1. Install agent-browser (reads cookies from Chrome):
+npm i -g agent-browser
+# 2. Log in to https://muse.ai/ in Chrome
+# 3. Export your session (one time; re-run when it expires):
 muse-cli auth export
 
 muse-cli status

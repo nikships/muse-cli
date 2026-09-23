@@ -39,11 +39,15 @@ curl -fsSL "$RAW_URL/skills/muse-cli/SKILL.md" -o "$SKILL_DIR/muse-cli/SKILL.md"
 echo "skill installed at $SKILL_DIR/muse-cli"
 
 BIN_DIR="$(uv tool dir --bin 2>/dev/null || echo "$HOME/.local/bin")"
+# uv prints the bin dir with a literal ".." inside; normalize it so the PATH
+# check below compares real paths.
+[ -d "$BIN_DIR" ] && BIN_DIR="$(cd "$BIN_DIR" && pwd)"
 echo
 echo "Next steps:"
-echo "  1. Log in to https://muse.ai/ in Chrome"
-echo "  2. $BIN_NAME auth export"
-echo "  3. $BIN_NAME status"
+echo "  1. npm i -g agent-browser   # auth export reads Chrome cookies through it"
+echo "  2. Log in to https://muse.ai/ in Chrome"
+echo "  3. $BIN_NAME auth export"
+echo "  4. $BIN_NAME status"
 case ":$PATH:" in
   *":$BIN_DIR:"*) ;;
   *) echo "NOTE: $BIN_DIR is not on your PATH; run 'uv tool update-shell' or use $BIN_DIR/$BIN_NAME" ;;

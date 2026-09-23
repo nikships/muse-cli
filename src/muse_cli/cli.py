@@ -9,6 +9,7 @@ Then: muse-cli status | muse-cli threads | muse-cli history | muse-cli send "hel
 import argparse
 import json
 import os
+import shutil
 import sys
 import time
 
@@ -75,6 +76,10 @@ def _browser_cookies(headed):
     """Read the cookie jar via agent-browser. Headed auto-connect attaches
     to the user's real Chrome; plain mode uses a fresh browser (no login)."""
     base = ["agent-browser"] + (["--headed", "--auto-connect"] if headed else [])
+    if shutil.which("agent-browser") is None:
+        print("agent-browser not found; install it with: npm i -g agent-browser", file=sys.stderr)
+        print("alternative: export cookies by hand, see README Setup notes.", file=sys.stderr)
+        sys.exit(1)
     last_err = "unknown error"
     for _ in range(3):
         try:
