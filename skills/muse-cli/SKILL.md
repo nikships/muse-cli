@@ -9,7 +9,7 @@ Assume a bare machine: only this skill is present. No repo clone, no
 dependencies, no auth. Work top to bottom; stop at the first step that
 fails and report it.
 
-The repo ships a CLI (`cli.py`) that talks to the muse.ai personal gateway
+The `muse-cli` package (on PyPI) talks to the muse.ai personal gateway
 directly. No browser needed after the one-time cookie export. Every command
 prints JSON.
 
@@ -19,16 +19,15 @@ prints JSON.
 curl -fsSL https://raw.githubusercontent.com/nikships/muse-cli/main/install.sh | bash
 ```
 
-This installs the CLI with uv (bringing its own virtualenv), its Python
-dependencies, and this skill (to `~/.agents/skills/muse-cli`). Prefer manual
-setup? Clone https://github.com/nikships/muse-cli.git to `~/muse-cli`, run
-`uv venv && uv pip install -r requirements.txt` there, and link `cli.py` as
-`~/bin/muse-cli` (`muse` clashes with Muse Code, don't use it). Verify before
-continuing:
+This installs the CLI from PyPI with `uv tool install muse-cli` (its own
+isolated environment) and this skill (to `~/.agents/skills/muse-cli`). CLI
+only? `uv tool install muse-cli`, `pipx install muse-cli`, or
+`pip install muse-cli` all work. The command is `muse-cli` (`muse` clashes
+with Muse Code, don't use it). Verify before continuing:
 
 ```bash
 command -v muse-cli
-muse-cli --help >/dev/null && echo cli-ok   # proves the venv + deps resolve
+muse-cli --help >/dev/null && echo cli-ok   # proves the install + deps resolve
 ```
 
 ## 2. Auth

@@ -1,0 +1,85 @@
+[build-system]
+requires = ["hatchling>=1.27"]
+build-backend = "hatchling.build"
+
+[project]
+name = "muse-cli"
+dynamic = ["version"]
+description = "Command-line client for your personal muse.ai AI agent: chat, automate, and manage side chats, feed, goals, ideas, and sessions from the terminal. No browser needed."
+readme = "README.md"
+requires-python = ">=3.10"
+license = "MIT"
+license-files = ["LICENSE"]
+authors = [{ name = "Nik", email = "mntechsurvey@gmail.com" }]
+keywords = [
+    "muse",
+    "muse.ai",
+    "muse-ai",
+    "muse-cli",
+    "ai",
+    "ai-agent",
+    "ai-assistant",
+    "personal-ai",
+    "personal-assistant",
+    "agent",
+    "chatbot",
+    "chat",
+    "llm",
+    "cli",
+    "terminal",
+    "command-line",
+    "automation",
+    "agent-skill",
+    "noise-protocol",
+    "websocket",
+]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Environment :: Console",
+    "Intended Audience :: Developers",
+    "Intended Audience :: End Users/Desktop",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
+    "Topic :: Communications :: Chat",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Topic :: Terminals",
+    "Topic :: Utilities",
+]
+dependencies = [
+    "curl_cffi>=0.11",
+    "noiseprotocol>=0.3",
+    "protobuf>=5.0",
+]
+
+[project.urls]
+Homepage = "https://github.com/nikships/muse-cli"
+Documentation = "https://github.com/nikships/muse-cli#readme"
+Repository = "https://github.com/nikships/muse-cli"
+Issues = "https://github.com/nikships/muse-cli/issues"
+Changelog = "https://github.com/nikships/muse-cli/releases"
+"Protocol Notes" = "https://github.com/nikships/muse-cli/blob/main/docs/PROTOCOL.md"
+
+[project.scripts]
+muse-cli = "muse_cli.cli:main"
+
+[tool.hatch.version]
+path = "src/muse_cli/__init__.py"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/muse_cli"]
+
+[tool.hatch.build.targets.sdist]
+include = [
+    "src/muse_cli",
+    "docs",
+    "skills",
+    "README.md",
+    "LICENSE",
+]

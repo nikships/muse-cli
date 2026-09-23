@@ -3,6 +3,8 @@ __pycache__/
 *.py[cod]
 .venv/
 *.egg-info/
+dist/
+build/
 
 # Local secrets and state (never commit)
 cookies.txt

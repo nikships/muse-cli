@@ -1,9 +1,8 @@
-#!/usr/bin/env python3
-"""muse: CLI for your personal muse.ai agent. No browser needed (after cookie export).
+"""muse-cli: CLI for your personal muse.ai agent. No browser needed (after cookie export).
 
 Setup:
   1. Log in to https://muse.ai/ in Chrome (Auth profile).
-  2. muse auth export   # saves session cookies locally (chmod 600)
+  2. muse-cli auth export   # saves session cookies locally (chmod 600)
 
 Then: muse-cli status | muse-cli threads | muse-cli history | muse-cli send "hello" | ...
 """
@@ -13,8 +12,8 @@ import os
 import sys
 import time
 
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from muse import Gateway, AuthError, GatewayError, load_cookies  # noqa: E402
+from . import __version__
+from .gateway import Gateway, AuthError, GatewayError, load_cookies
 
 CONFIG_DIR = os.path.expanduser("~/.config/muse-cli")
 CONFIG_FILE = os.path.join(CONFIG_DIR, "config.json")
@@ -43,6 +42,9 @@ def load_config():
 
 
 def connect(cfg):
+    if not os.path.exists(cfg["cookies_file"]):
+        raise AuthError(f"no cookies at {cfg['cookies_file']}; log in to https://muse.ai/ "
+                        "in Chrome, then run `muse-cli auth export`")
     cookies = load_cookies(cfg["cookies_file"])
     if not cookies.strip():
         raise AuthError(f"cookies file {cfg['cookies_file']} is empty; run `muse-cli auth export`")
@@ -133,7 +135,6 @@ def cmd_auth_export(_args):
 def cmd_status(_args):
     gw = connect(load_config())
     try:
-        from muse import fetch_access_token  # noqa
         sess = gw.call_json("sessions.list")
         unread = gw.call_json("chat.unread_count")
         ident = gw.call_json("identity")
@@ -423,7 +424,7 @@ def cmd_session_op(kind):
 
 def cmd_wake(_args):
     cfg = load_config()
-    from muse import _hatch_headers, fetch_access_token, fetch_session_info, load_cookies
+    from .gateway import _hatch_headers, fetch_access_token, fetch_session_info
     from curl_cffi import requests as rq
     cookies = load_cookies(cfg["cookies_file"])
     at = fetch_access_token(cookies)
@@ -435,9 +436,9 @@ def cmd_wake(_args):
 
 
 def cmd_raw(args):
-    from muse import ROUTES
+    from .gateway import ROUTES
     if args.method not in ROUTES:
-        print(f"unknown method '{args.method}' (see routes.json for the 258 known methods)",
+        print(f"unknown method '{args.method}' (see routes.json for the {len(ROUTES)} known methods)",
               file=sys.stderr)
         sys.exit(2)
     try:
@@ -466,6 +467,7 @@ def cmd_raw(args):
 
 def main():
     ap = argparse.ArgumentParser(prog="muse-cli", description="CLI for your personal muse.ai agent")
+    ap.add_argument("--version", action="version", version=f"%(prog)s {__version__}")
     sub = ap.add_subparsers(dest="cmd", required=True)
 
     p = sub.add_parser("auth", help="auth helpers"); a = p.add_subparsers(dest="op", required=True)

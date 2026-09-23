@@ -1,17 +1,16 @@
 #!/usr/bin/env bash
-# muse-cli installer: CLI + agent skill, powered by uv. No browser needed afterwards.
+# muse-cli installer: CLI (from PyPI, via uv) + agent skill. No browser needed afterwards.
 # Usage: curl -fsSL https://raw.githubusercontent.com/nikships/muse-cli/main/install.sh | bash
 set -u
 
 REPO_URL="${MUSE_CLI_REPO:-https://github.com/nikships/muse-cli.git}"
-DEST="${MUSE_CLI_DIR:-$HOME/muse-cli}"
-BIN_DIR="${MUSE_CLI_BIN:-$HOME/bin}"
-BIN_NAME="muse-cli"   # 'muse' clashes with Muse Code, don't use it
+RAW_URL="${MUSE_CLI_RAW:-https://raw.githubusercontent.com/nikships/muse-cli/main}"
 SKILL_DIR="${MUSE_CLI_SKILLS:-$HOME/.agents/skills}"
+BIN_NAME="muse-cli"   # 'muse' clashes with Muse Code, don't use it
+LEGACY_BIN="${MUSE_CLI_BIN:-$HOME/bin}/$BIN_NAME"
 
 fail() { echo "install failed: $1" >&2; exit 1; }
 
-command -v git >/dev/null || fail "git not found"
 command -v curl >/dev/null || fail "curl not found"
 
 if ! command -v uv >/dev/null; then
@@ -21,34 +20,25 @@ if ! command -v uv >/dev/null; then
 fi
 command -v uv >/dev/null || fail "uv not found after install"
 
-if [ -d "$DEST/.git" ]; then
-  echo "updating existing checkout at $DEST"
-  git -C "$DEST" pull --ff-only || fail "git pull failed"
-else
-  echo "cloning into $DEST"
-  git clone "$REPO_URL" "$DEST" || fail "git clone failed"
+echo "installing $BIN_NAME with uv"
+if ! uv tool install --upgrade muse-cli; then
+  echo "PyPI install failed, installing from $REPO_URL"
+  uv tool install --upgrade "git+$REPO_URL" || fail "uv tool install failed"
 fi
 
-echo "creating virtualenv and installing dependencies with uv"
-if [ ! -x "$DEST/.venv/bin/python" ]; then
-  uv venv "$DEST/.venv" || fail "uv venv failed"
+# Older installers wrote a launcher into ~/bin that runs a git checkout's
+# cli.py; it would shadow the new command and break once the checkout updates.
+if [ -f "$LEGACY_BIN" ] && grep -q "cli.py" "$LEGACY_BIN" 2>/dev/null; then
+  rm -f "$LEGACY_BIN"
+  echo "removed old launcher at $LEGACY_BIN"
 fi
-uv pip install --python "$DEST/.venv/bin/python" -r "$DEST/requirements.txt" \
-  || fail "uv pip install failed"
-
-mkdir -p "$BIN_DIR"
-rm -f "$BIN_DIR/$BIN_NAME"   # may be a stale symlink into the repo; cat would follow it
-cat > "$BIN_DIR/$BIN_NAME" <<EOF
-#!/usr/bin/env bash
-exec "$DEST/.venv/bin/python" "$DEST/cli.py" "\$@"
-EOF
-chmod +x "$BIN_DIR/$BIN_NAME"
-echo "launcher installed at $BIN_DIR/$BIN_NAME"
 
 mkdir -p "$SKILL_DIR/muse-cli"
-cp -r "$DEST/skills/muse-cli/." "$SKILL_DIR/muse-cli/"
+curl -fsSL "$RAW_URL/skills/muse-cli/SKILL.md" -o "$SKILL_DIR/muse-cli/SKILL.md" \
+  || fail "skill download failed"
 echo "skill installed at $SKILL_DIR/muse-cli"
 
+BIN_DIR="$(uv tool dir --bin 2>/dev/null || echo "$HOME/.local/bin")"
 echo
 echo "Next steps:"
 echo "  1. Log in to https://muse.ai/ in Chrome"
@@ -56,5 +46,5 @@ echo "  2. $BIN_NAME auth export"
 echo "  3. $BIN_NAME status"
 case ":$PATH:" in
   *":$BIN_DIR:"*) ;;
-  *) echo "NOTE: $BIN_DIR is not on your PATH; add it or run $BIN_DIR/$BIN_NAME" ;;
+  *) echo "NOTE: $BIN_DIR is not on your PATH; run 'uv tool update-shell' or use $BIN_DIR/$BIN_NAME" ;;
 esac
