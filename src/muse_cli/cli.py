@@ -82,7 +82,32 @@ def _parse_browser_doc(stdout):
     return None
 
 
-def _browser_run(argv):
+def _interpret_browser(returncode, stdout, stderr, require_json):
+    """Turn one agent-browser invocation into data, or raise RuntimeError.
+
+    `tab <id>` confirms success with a human line (`✓ Title` plus the URL)
+    and exit 0. That is not a failure. A real failure is `success: false`
+    or a non-zero exit.
+    """
+    doc = _parse_browser_doc(stdout) or _parse_browser_doc(stderr)
+    if isinstance(doc, dict) and doc.get("success") is False:
+        raise RuntimeError(str(doc.get("error") or "unknown error")[:400])
+    if isinstance(doc, dict):
+        data = doc.get("data")
+        if isinstance(data, dict):
+            return data
+        if isinstance(data, list):
+            return {"items": data}
+        if "cookies" in doc or "tabs" in doc:
+            return doc
+        return data if isinstance(data, dict) else (doc if doc.get("success") else {})
+    text = (stderr or stdout or "").strip()
+    if returncode == 0 and not require_json:
+        return {}
+    raise RuntimeError(text[:400] or f"exit {returncode}")
+
+
+def _browser_run(argv, require_json=True):
     """Run agent-browser and return the JSON envelope's data.
 
     On failure the tool prints {"success": false, "error": ...}. Some versions
@@ -90,13 +115,7 @@ def _browser_run(argv):
     """
     import subprocess
     r = subprocess.run(argv, capture_output=True, text=True)
-    doc = _parse_browser_doc(r.stdout) or _parse_browser_doc(r.stderr)
-    if isinstance(doc, dict) and doc.get("success") is False:
-        raise RuntimeError(str(doc.get("error") or "unknown error")[:400])
-    if r.returncode != 0 or doc is None:
-        msg = (r.stderr or r.stdout or "").strip()
-        raise RuntimeError(msg[:400] or f"exit {r.returncode}")
-    return doc.get("data", {}) if isinstance(doc, dict) else doc
+    return _interpret_browser(r.returncode, r.stdout, r.stderr, require_json)
 
 
 def _export_error_kind(err):
@@ -108,6 +127,9 @@ def _export_error_kind(err):
         return "debug"
     if err == "no muse.ai tab open in Chrome":
         return "tab"
+    # A page title from agent-browser means Chrome already answered.
+    if "https://muse.ai" in e or e.startswith("✓") or e.startswith("connected to chrome"):
+        return "connected"
     return "other"
 
 
@@ -173,6 +195,13 @@ def _print_export_failure(err):
         print("Open https://muse.ai/, log in, leave that tab open, and run", file=sys.stderr)
         print("`muse-cli auth export` again.", file=sys.stderr)
         return
+    if kind == "connected":
+        print("Chrome is connected and the muse.ai tab is open.", file=sys.stderr)
+        print("Remote debugging is already on. The cookie read did not come back.", file=sys.stderr)
+        print("Run `muse-cli auth export` again. If Chrome asks, click Allow.", file=sys.stderr)
+        print(file=sys.stderr)
+        _print_hand_copy()
+        return
     print(err, file=sys.stderr)
     print(file=sys.stderr)
     print("Check both of these, then run `muse-cli auth export` again:", file=sys.stderr)
@@ -201,10 +230,22 @@ def _browser_cookies():
                          and (t.get("id") or t.get("tabId"))]
             if not muse_tabs:
                 return None, "no muse.ai tab open in Chrome"
-            _browser_run(base + ["tab", muse_tabs[0].get("id") or muse_tabs[0]["tabId"]])
+            tab_id = (muse_tabs[0].get("id") or muse_tabs[0].get("tabId")
+                      or muse_tabs[0].get("targetId"))
+            # Switching tabs prints a human confirmation unless --json is set.
+            # Exit 0 is success either way; the cookies read is the next call.
+            _browser_run(base + ["tab", tab_id, "--json"], require_json=False)
             data = _browser_run(base + ["cookies", "get", "--json"])
-            jar = data.get("cookies", []) if isinstance(data, dict) else []
-            return [c for c in jar if "muse.ai" in c.get("domain", "")], None
+            raw = []
+            if isinstance(data, list):
+                raw = data
+            elif isinstance(data, dict):
+                for key in ("cookies", "items"):
+                    if isinstance(data.get(key), list):
+                        raw = data[key]
+                        break
+            jar = [c for c in raw if isinstance(c, dict) and "muse.ai" in (c.get("domain") or c.get("url") or "")]
+            return jar, None
         except RuntimeError as e:
             last_err = str(e)
             # Missing debug port and a stuck daemon will not change on retry.
