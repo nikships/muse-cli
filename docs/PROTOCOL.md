@@ -74,6 +74,9 @@ chat / feed / goals / ideas / sessions / ...
   delete: `{method: "/api/session/<op>", session_id}`.
 - `api.idea-cards.execute`: `{ideaCardId, mode: "full"}` plus path param.
 - POSTs to muse.ai need browser `Sec-Fetch-*` headers or they return 403.
-- `auth export` must focus a muse.ai tab before reading cookies (the export
-  follows the active tab) and must never overwrite a working jar without a
-  `hatch_sess` in the new one.
+- `auth export` reads cookies from the user's own Google Chrome through
+  agent-browser `--auto-connect`. Chrome 144+ shares that profile only after
+  remote debugging is enabled at `chrome://inspect/#remote-debugging`. The
+  export follows the active tab, so a muse.ai tab has to be focused first,
+  and it must never overwrite a working jar without a `hatch_sess` in the
+  new one. A freshly launched browser has no login; do not fall back to one.
