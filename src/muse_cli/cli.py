@@ -622,10 +622,15 @@ def cmd_raw(args):
         gw.close()
 
 
+def _chat(args):
+    from .chat import cmd_chat
+    cmd_chat(args)
+
+
 def main():
     ap = argparse.ArgumentParser(prog="muse-cli", description="CLI for your personal muse.ai agent")
     ap.add_argument("--version", action="version", version=f"%(prog)s {__version__}")
-    sub = ap.add_subparsers(dest="cmd", required=True)
+    sub = ap.add_subparsers(dest="cmd")
 
     p = sub.add_parser("auth", help="auth helpers"); a = p.add_subparsers(dest="op", required=True)
     export_help = (
@@ -655,6 +660,7 @@ def main():
         formatter_class=argparse.RawDescriptionHelpFormatter,
     ).set_defaults(fn=cmd_auth_export)
 
+    sub.add_parser("chat", help="interactive chat (the default with no command)").set_defaults(fn=_chat)
     sub.add_parser("status", help="VM, session count, unread, identity").set_defaults(fn=cmd_status)
     p = sub.add_parser("threads", help="list chats and side chats")
     p.add_argument("--all", dest="archived", action="store_true", help="include archived")
@@ -704,6 +710,8 @@ def main():
     p.add_argument("--timeout", type=int, default=30); p.set_defaults(fn=cmd_raw)
 
     args = ap.parse_args()
+    if args.cmd is None:
+        args.cmd, args.fn = "chat", _chat
     # A piped command prints JSON. The notice stays off unless both streams
     # are a terminal, and `update` is already doing the upgrade.
     notice = None if args.cmd == "update" else start_update_check()
