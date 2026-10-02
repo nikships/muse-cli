@@ -362,7 +362,9 @@ def is_reply(ev, baseline):
         return False
     if not (p.get("display_text") or p.get("content")):
         return False
-    if "display_text_ready" in p and not p["display_text_ready"]:
+    # A reply still being written has no status yet (and display_text_ready
+    # is already true), so its text is cut short; wait for "completed".
+    if not p.get("status"):
         return False
     return True
 

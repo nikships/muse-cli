@@ -75,7 +75,7 @@ class Chat:
         for ev in self.events(15):
             p = ev.get("payload") if isinstance(ev.get("payload"), dict) else {}
             if (ev.get("event_name") == "message.assistant" and ev.get("seq", 0) > after
-                    and p.get("display_text_ready", True) and fmt_event(ev)["text"]):
+                    and p.get("status") and fmt_event(ev)["text"]):
                 found.append(ev)
         return found
 
