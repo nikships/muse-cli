@@ -74,6 +74,10 @@ class Chat:
         found = []
         for ev in self.events(15):
             p = ev.get("payload") if isinstance(ev.get("payload"), dict) else {}
+            # Exclude background updates (same discriminator as cli.is_reply):
+            # events with reply_to_message_id are not genuine replies
+            if ev.get("reply_to_message_id") or p.get("reply_to_message_id"):
+                continue
             if (ev.get("event_name") == "message.assistant" and ev.get("seq", 0) > after
                     and p.get("status") and fmt_event(ev)["text"]):
                 found.append(ev)
