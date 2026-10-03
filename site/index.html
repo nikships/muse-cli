@@ -164,6 +164,21 @@
     text-transform: uppercase; color: var(--accent);
   }
 
+  /* Hero video */
+  .video-frame { position: relative; }
+  .video-frame video { display: block; width: 100%; height: auto; aspect-ratio: 16 / 9; background: #070b12; }
+  .sound {
+    position: absolute; right: 16px; bottom: 16px;
+    font-family: var(--mono); font-size: 0.78rem;
+    background: rgba(7, 11, 18, 0.8); color: var(--text);
+    border: 1px solid var(--line); border-radius: 8px;
+    padding: 7px 14px; cursor: pointer;
+    backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
+    transition: border-color 200ms, transform 150ms, background 200ms;
+  }
+  .sound:hover { border-color: var(--accent); background: rgba(7, 11, 18, 0.92); }
+  .sound:active { transform: scale(0.97); }
+
   /* Install strip */
   .install-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
   .cmd { position: relative; background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 18px; transition: border-color 200ms; }
@@ -261,6 +276,7 @@
   <div class="nav-inner">
     <a class="logo" href="#">muse-cli<b>▊</b></a>
     <div class="nav-links">
+      <a href="#video">Video</a>
       <a href="#install">Install</a>
       <a href="#demo">Demo</a>
       <a href="#features">Features</a>
@@ -298,6 +314,18 @@
       </div>
     </div>
   </div>
+
+  <section class="block" id="video" aria-label="Video">
+    <div class="section-head reveal">
+      <p class="kicker">In 30 seconds</p>
+      <h2>Your coding agent can now talk to your personal agent.</h2>
+    </div>
+    <figure class="shot-frame video-frame reveal">
+      <video id="promo" src="muse-cli.mp4" poster="muse-cli-poster.jpg" autoplay muted loop playsinline preload="metadata" aria-label="muse-cli in 30 seconds: Claude Code checks goals, updates a plan, and books dinner through your Muse agent"></video>
+      <button class="sound" id="sound" type="button" aria-pressed="false">sound on</button>
+      <figcaption class="shot-cap"><span><b>●</b> claude code → muse-cli → your muse</span><span>voice + music</span></figcaption>
+    </figure>
+  </section>
 
   <section class="block" id="install" aria-label="Install">
     <div class="section-head reveal">
@@ -403,6 +431,15 @@ function copy(btn){
     btn.textContent='copied'; setTimeout(()=>btn.textContent='copy',1500);
   });
 }
+const promo = document.getElementById('promo');
+const sound = document.getElementById('sound');
+sound.addEventListener('click', () => {
+  promo.muted = !promo.muted;
+  if (!promo.muted) { promo.currentTime = 0; promo.play(); }
+  sound.textContent = promo.muted ? 'sound on' : 'sound off';
+  sound.setAttribute('aria-pressed', String(!promo.muted));
+});
+if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) { promo.removeAttribute('autoplay'); promo.pause(); }
 const io = new IntersectionObserver((entries)=>{
   entries.forEach(e=>{ if(e.isIntersecting){ e.target.classList.add('in'); io.unobserve(e.target); } });
 },{threshold:0.12});

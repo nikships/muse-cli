@@ -11,9 +11,9 @@ Talk to your personal muse.ai AI agent from the terminal.
 [![GitHub stars](https://img.shields.io/github/stars/nikships/muse-cli?style=for-the-badge)](https://github.com/nikships/muse-cli/stargazers)
 [![Website](https://img.shields.io/badge/website-live-3fb950?style=for-the-badge)](https://muse-cli-site.web.app)
 
-![muse-cli hero](https://raw.githubusercontent.com/nikships/muse-cli/main/assets/hero.webp)
-
 </div>
+
+https://github.com/user-attachments/assets/8c9aefe8-c5a4-4e4b-9393-48e2325f99a9
 
 ## What is this?
 
