@@ -160,6 +160,7 @@ muse-cli status
 ## Usage
 
 ```bash
+muse-cli                                          # interactive chat (same as `muse-cli chat`)
 muse-cli threads                                  # main chat + side chats
 muse-cli history --limit 5                        # recent messages
 muse-cli history --thread <session-id> --limit 5  # one side chat
@@ -180,7 +181,11 @@ muse-cli wake
 muse-cli raw <method> --body '{}'                 # escape hatch: any of 258 gateway methods
 ```
 
-Every command prints JSON. Your VM is auto-discovered from your session, and a
+The interactive chat prints plain text, one message per line, so it works well
+with screen readers. It resumes the conversation you used last; type `/help`
+inside it for `/chats`, `/open N`, `/main`, `/new`, `/history`, and `/login`.
+
+Every other command prints JSON. Your VM is auto-discovered from your session, and a
 random device id is generated on first run.
 
 Pipe it into other tools:
