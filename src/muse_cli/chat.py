@@ -12,6 +12,7 @@ from .gateway import AuthError, GatewayError
 
 WAIT = 300   # seconds to wait for the first reply
 QUIET = 10   # seconds of silence after a reply before taking the next message
+POLL = 1     # seconds between history reads while waiting for a reply
 STATE = os.path.join(CONFIG_DIR, "chat.json")
 
 HELP = """Commands:
@@ -91,7 +92,7 @@ class Chat:
         print("Muse is thinking...")
         deadline, got_any = time.time() + WAIT, False
         while time.time() < deadline:
-            time.sleep(3)
+            time.sleep(POLL)
             try:
                 evs = self.new_replies(seen)
             except (GatewayError, TimeoutError):
