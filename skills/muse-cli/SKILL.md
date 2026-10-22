@@ -138,6 +138,7 @@ muse-cli history --thread <session-id> --limit 5        # one side chat
 muse-cli send "message" --wait 120                      # send + wait for the reply
 muse-cli send "message" --thread <session-id> --wait 0  # fire and forget to a side chat
 muse-cli watch --timeout 60                             # tail live agent events
+muse-cli watch --thread <session-id>                    # tail one side chat
 muse-cli feed --limit 5
 muse-cli goals
 muse-cli ideas

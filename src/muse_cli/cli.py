@@ -369,6 +369,11 @@ def is_reply(ev, baseline):
     return True
 
 
+# How often a waiting send re-reads history. A history read is one small
+# unary call; at 4 s a finished reply sat unshown for up to 4 s.
+POLL = 1
+
+
 def cmd_send(args):
     cfg = load_config()
     gw = connect(cfg)
@@ -405,14 +410,14 @@ def cmd_send(args):
             try:
                 h = gw.call_json("chat.history", body={"limit": 10, **scope})
             except (GatewayError, TimeoutError):
-                time.sleep(4)
+                time.sleep(POLL)
                 continue
             for ev in sorted(h.get("chat_events", []), key=lambda e: e.get("seq", 0)):
                 if is_reply(ev, baseline):
                     reply = fmt_event(ev)
                     break
             if reply is None:
-                time.sleep(4)
+                time.sleep(POLL)
         result = {"sent": True, "stream": stream_sid}
         if reply:
             result["reply"] = reply
@@ -423,22 +428,34 @@ def cmd_send(args):
         gw.close()
 
 
+def _print_watch_row(line, show_all):
+    try:
+        ev = json.loads(line)
+    except json.JSONDecodeError:
+        return
+    et = ev.get("event", ev.get("type"))
+    if et in ("agent.status",) and not show_all:
+        return
+    p = ev.get("payload", {}) if isinstance(ev.get("payload"), dict) else {}
+    row = {"event": et, "seq": ev.get("seq")}
+    for k in ("display_text", "content", "text", "activity_text", "status"):
+        if p.get(k):
+            row[k] = str(p[k])[:300]
+    print(json.dumps(row, ensure_ascii=False), flush=True)
+
+
 def cmd_watch(args):
     gw = connect(load_config())
     try:
-        recs = gw.subscribe_json("chat.subscribe", body={"capabilities": {}},
-                                 max_records=args.n, idle_timeout=8,
-                                 overall_timeout=args.timeout)
-        for ev in recs:
-            et = ev.get("event", ev.get("type"))
-            if et in ("agent.status",) and not args.all:
-                continue
-            p = ev.get("payload", {}) if isinstance(ev.get("payload"), dict) else {}
-            row = {"event": et, "seq": ev.get("seq")}
-            for k in ("display_text", "content", "text", "activity_text", "status"):
-                if p.get(k):
-                    row[k] = str(p[k])[:300]
-            print(json.dumps(row, ensure_ascii=False), flush=True)
+        # Subscribe the way the web client does: capabilities as a list, and
+        # a thread's own session id when watching a side chat.
+        body = {"capabilities": ["chat_cancel", "delta_stream"]}
+        if args.thread:
+            body["session_id"] = args.thread
+        # Rows print as each event arrives, not after the stream ends.
+        gw.subscribe_raw("chat.subscribe", body=body, max_records=args.n,
+                         idle_timeout=args.timeout, overall_timeout=args.timeout,
+                         on_record=lambda line: _print_watch_row(line, args.all))
     finally:
         gw.close()
 
@@ -676,7 +693,8 @@ def main():
     p.set_defaults(fn=cmd_send)
     p = sub.add_parser("watch", help="tail live agent events")
     p.add_argument("--timeout", type=int, default=60); p.add_argument("--n", type=int, default=50)
-    p.add_argument("--all", action="store_true"); p.set_defaults(fn=cmd_watch)
+    p.add_argument("--all", action="store_true"); p.add_argument("--thread", default=None)
+    p.set_defaults(fn=cmd_watch)
     p = sub.add_parser("feed", help="list feed units")
     p.add_argument("--limit", type=int, default=None); p.add_argument("--raw", action="store_true")
     p.set_defaults(fn=cmd_feed)
