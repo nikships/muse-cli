@@ -51,6 +51,28 @@ class AuthError(RuntimeError):
     pass
 
 
+def media_path(ref):
+    """Map a sandbox path / media URL / resource dict to a /media/raw/... path."""
+    if isinstance(ref, dict):
+        ref = (ref.get("variants") or {}).get("original") or ref.get("path") or ref.get("url")
+        if not ref:
+            raise ValueError("resource has no path or variants.original")
+    ref = str(ref)
+    if ref.startswith("sandbox://"):
+        rel = ref[len("sandbox://"):]
+    elif ref.startswith(("https://", "http://")):
+        rel = urllib.parse.urlsplit(ref).path
+    else:
+        rel = ref
+    rel = rel.lstrip("/")
+    if rel.startswith("media/raw/"):
+        rel = rel[len("media/raw/"):]
+    rel = urllib.parse.unquote(rel)
+    if not rel or ".." in rel.split("/"):
+        raise ValueError(f"bad sandbox path: {ref!r}")
+    return "/media/raw/" + urllib.parse.quote(rel, safe="/")
+
+
 class GatewayError(RuntimeError):
     def __init__(self, status, payload):
         super().__init__(f"gateway status={status} payload={payload!r}")
@@ -198,8 +220,8 @@ class Gateway:
         sf.ParseFromString(sr.payload)
         return sf
 
-    def _open(self, method, path_params=None, body=None, query=None):
-        route = ROUTES[method]
+    def _open(self, method, path_params=None, body=None, query=None, route=None):
+        route = route or ROUTES[method]
         path = route["path"]
         for k, v in (path_params or {}).items():
             path = path.replace("{" + k + "}", urllib.parse.quote(str(v), safe=""))
@@ -225,11 +247,11 @@ class Gateway:
         return sid
 
     # -- unary request/response --------------------------------------------
-    def request(self, method, path_params=None, body=None, query=None, timeout=30):
-        route = ROUTES[method]
+    def request(self, method, path_params=None, body=None, query=None, timeout=30, route=None):
+        route = route or ROUTES[method]
         if route["http"] == "GET" and body is not None and query is None:
             query, body = body, None
-        sid = self._open(method, path_params, body, query)
+        sid = self._open(method, path_params, body, query, route=route)
         status, chunks, deadline = None, [], time.time() + timeout
         while time.time() < deadline:
             sf = self._read_frame()
@@ -254,6 +276,21 @@ class Gateway:
         if status < 200 or status >= 300:
             raise GatewayError(status, payload[:500].decode("utf-8", "replace"))
         return payload
+
+    # -- files the agent produced (sandbox://...) ---------------------------
+    def download_file(self, ref, timeout=300):
+        """Return the bytes of a file in the agent's sandbox.
+
+        `ref` is a `sandbox://workspace/...` path, a media URL from a
+        resource's `variants` (https://<vm>.metaaivm.com/media/raw/...), a
+        bare `/media/raw/...` path, or a resource dict with `path`/`variants`.
+        The web app loads these from GET /media/raw/<path> on the VM; here
+        the same request rides the Noise tunnel (plain TLS to the per-VM
+        host is reset at the edge).
+        """
+        path = media_path(ref)
+        route = {"method": "media.raw", "http": "GET", "path": path}
+        return self.request("media.raw", timeout=timeout, route=route)
 
     def call_json(self, method, path_params=None, body=None, query=None, timeout=30):
         raw = self.request(method, path_params, body, query, timeout)

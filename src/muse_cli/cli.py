@@ -11,6 +11,7 @@ Then: muse-cli status | muse-cli threads | muse-cli history | muse-cli send "hel
 import argparse
 import json
 import os
+import re
 import shutil
 import sys
 import time
@@ -337,11 +338,152 @@ def cmd_history(args):
             params["session_id"] = args.thread
         d = gw.call_json("chat.history", body=params)
         events = d.get("chat_events", [])
+        if args.download:
+            res = []
+            for e in events:
+                for r in event_resources(e):
+                    if r["path"] not in [x["path"] for x in res]:
+                        res.append(r)
+            d["downloads"] = save_resources(gw, res, args.download)
+            if not args.raw:
+                rows = [fmt_event(e) for e in events if (e.get("payload", {}) or {}).get("display_text")
+                        or (e.get("payload", {}) or {}).get("content")]
+                out({"messages": rows, "downloads": d["downloads"]})
+                return
         if args.raw:
             out(d)
             return
         out([fmt_event(e) for e in events if (e.get("payload", {}) or {}).get("display_text")
              or (e.get("payload", {}) or {}).get("content")])
+    finally:
+        gw.close()
+
+
+# -- files the agent produced -------------------------------------------------
+# Assistant messages carry media as payload.data.{videos,images,...}[]
+# entries ({path: "sandbox://workspace/...", mime, byte_len, variants:
+# {original: "https://<vm>.metaaivm.com/media/raw/..."}}), and as
+# sandbox:// links in fallback_text.
+_SANDBOX_RE = re.compile(r"sandbox://[^\s)\]\"'>]+")
+
+
+def event_resources(ev):
+    """List the downloadable files referenced by one history event."""
+    p = ev.get("payload", {}) if isinstance(ev.get("payload"), dict) else {}
+    found = {}
+
+    def add(item, kind):
+        if isinstance(item, str):
+            item = {"path": item}
+        if not isinstance(item, dict):
+            return
+        path = item.get("path") or (item.get("variants") or {}).get("original")
+        if not path or not (path.startswith("sandbox://") or "/media/raw/" in path):
+            return
+        if item.get("missing"):
+            return
+        r = found.setdefault(path, {"path": path})
+        r.setdefault("kind", kind)
+        for k in ("mime", "byte_len", "label", "variants"):
+            if item.get(k) is not None:
+                r[k] = item[k]
+
+    data = p.get("data") if isinstance(p.get("data"), dict) else {}
+    for key, val in data.items():
+        if isinstance(val, list):
+            for item in val:
+                add(item, key.rstrip("s"))
+    for src in (ev.get("resources"), p.get("resources")):
+        for item in src or []:
+            add(item, "resource")
+    for text in (p.get("fallback_text"), data.get("fallback_text"),
+                 p.get("display_text"), p.get("content")):
+        if isinstance(text, str):
+            for m in _SANDBOX_RE.findall(text):
+                add(m, "link")
+    return list(found.values())
+
+
+def _local_name(path, directory):
+    name = os.path.basename(path.split("?", 1)[0].rstrip("/")) or "download"
+    return os.path.join(directory, name)
+
+
+def save_resources(gw, resources, directory, overwrite=False):
+    """Download each resource into directory; return one result row each."""
+    os.makedirs(directory, exist_ok=True)
+    rows = []
+    for r in resources:
+        dest = _local_name(r["path"], directory)
+        row = {"path": r["path"], "file": os.path.abspath(dest)}
+        if os.path.exists(dest) and not overwrite:
+            row.update(skipped="exists", bytes=os.path.getsize(dest))
+            rows.append(row)
+            continue
+        try:
+            data = gw.download_file(r)
+        except (GatewayError, TimeoutError, ValueError) as e:
+            row["error"] = str(e)
+            rows.append(row)
+            continue
+        tmp = dest + ".part"
+        with open(tmp, "wb") as f:
+            f.write(data)
+        os.replace(tmp, dest)
+        row["bytes"] = len(data)
+        if r.get("byte_len") and r["byte_len"] != len(data):
+            row["warning"] = f"expected {r['byte_len']} bytes"
+        rows.append(row)
+    return rows
+
+
+def _history_events(gw, thread, limit):
+    params = {"limit": limit}
+    if thread:
+        params["session_id"] = thread
+    return gw.call_json("chat.history", body=params).get("chat_events", [])
+
+
+def cmd_files(args):
+    gw = connect(load_config())
+    try:
+        rows = []
+        for ev in _history_events(gw, args.thread, args.limit):
+            p = ev.get("payload", {}) if isinstance(ev.get("payload"), dict) else {}
+            for r in event_resources(ev):
+                rows.append({"seq": ev.get("seq"),
+                             "message_id": p.get("message_id") or ev.get("message_id"), **r})
+        out(rows)
+    finally:
+        gw.close()
+
+
+def cmd_download(args):
+    gw = connect(load_config())
+    try:
+        ref = args.ref
+        if ref.startswith("sandbox://") or "/media/raw/" in ref:
+            resources = [{"path": ref}]
+        else:
+            # A message id or history seq: collect that message's files.
+            resources = []
+            for ev in _history_events(gw, args.thread, args.limit):
+                p = ev.get("payload", {}) if isinstance(ev.get("payload"), dict) else {}
+                ids = {str(ev.get("seq")), str(p.get("message_id") or ""),
+                       str(ev.get("message_id") or ""), str(p.get("id") or "")}
+                if ref in ids:
+                    for r in event_resources(ev):
+                        if r["path"] not in [x["path"] for x in resources]:
+                            resources.append(r)
+            if not resources:
+                print(f"no files found for '{ref}' in the last {args.limit} messages"
+                      + (f" of thread {args.thread}" if args.thread else " of the main chat")
+                      + " (try --thread / --limit)", file=sys.stderr)
+                sys.exit(1)
+        rows = save_resources(gw, resources, args.output, overwrite=args.force)
+        out(rows)
+        if any("error" in r for r in rows):
+            sys.exit(3)
     finally:
         gw.close()
 
@@ -412,13 +554,30 @@ def cmd_send(args):
             except (GatewayError, TimeoutError):
                 time.sleep(POLL)
                 continue
-            for ev in sorted(h.get("chat_events", []), key=lambda e: e.get("seq", 0)):
+            evs = sorted(h.get("chat_events", []), key=lambda e: e.get("seq", 0))
+            for ev in evs:
                 if is_reply(ev, baseline):
                     reply = fmt_event(ev)
                     break
             if reply is None:
                 time.sleep(POLL)
         result = {"sent": True, "stream": stream_sid}
+        if reply and args.download:
+            # Media often lands as separate presentation events after the
+            # text reply; give them a moment, then save every file newer
+            # than the baseline.
+            time.sleep(min(3, max(0, deadline - time.time())))
+            try:
+                h = gw.call_json("chat.history", body={"limit": 20, **scope})
+                res = []
+                for ev in h.get("chat_events", []):
+                    if (ev.get("seq") or 0) > baseline:
+                        for r in event_resources(ev):
+                            if r["path"] not in [x["path"] for x in res]:
+                                res.append(r)
+                result["downloads"] = save_resources(gw, res, args.download)
+            except (GatewayError, TimeoutError) as e:
+                result["download_error"] = str(e)
         if reply:
             result["reply"] = reply
         else:
@@ -686,11 +845,26 @@ def main():
     p.set_defaults(fn=cmd_threads)
     p = sub.add_parser("history", help="read chat messages")
     p.add_argument("--thread", default=None); p.add_argument("--limit", type=int, default=10)
-    p.add_argument("--raw", action="store_true"); p.set_defaults(fn=cmd_history)
+    p.add_argument("--raw", action="store_true")
+    p.add_argument("--download", metavar="DIR", default=None,
+                   help="also save files (images/videos) from these messages into DIR")
+    p.set_defaults(fn=cmd_history)
     p = sub.add_parser("send", help="send the agent a message")
     p.add_argument("text"); p.add_argument("--thread", default=None)
     p.add_argument("--wait", type=int, default=90, help="seconds to wait for reply (0 = don't)")
+    p.add_argument("--download", metavar="DIR", default=None,
+                   help="save files the reply produced into DIR (needs --wait)")
     p.set_defaults(fn=cmd_send)
+    p = sub.add_parser("files", help="list files (images/videos) in recent messages")
+    p.add_argument("--thread", default=None); p.add_argument("--limit", type=int, default=20)
+    p.set_defaults(fn=cmd_files)
+    p = sub.add_parser("download", help="download a file the agent produced")
+    p.add_argument("ref", help="sandbox:// path, media URL, message id, or history seq")
+    p.add_argument("-o", "--output", default=".", help="directory to save into (default .)")
+    p.add_argument("--thread", default=None, help="side chat to search for a message id/seq")
+    p.add_argument("--limit", type=int, default=50, help="messages to search for a message id/seq")
+    p.add_argument("-f", "--force", action="store_true", help="overwrite existing files")
+    p.set_defaults(fn=cmd_download)
     p = sub.add_parser("watch", help="tail live agent events")
     p.add_argument("--timeout", type=int, default=60); p.add_argument("--n", type=int, default=50)
     p.add_argument("--all", action="store_true"); p.add_argument("--thread", default=None)
