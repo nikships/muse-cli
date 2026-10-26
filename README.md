@@ -166,6 +166,10 @@ muse-cli history --limit 5                        # recent messages
 muse-cli history --thread <session-id> --limit 5  # one side chat
 muse-cli send "summarize my unread" --wait 120    # send + wait for the reply
 muse-cli watch --timeout 60                       # tail live agent events
+muse-cli files --limit 20                         # images/videos in recent messages
+muse-cli download <seq|message-id|sandbox://...> -o ./out   # save agent-made files
+muse-cli history --limit 3 --download ./out       # save files from these messages
+muse-cli send "make a cat video" --wait 300 --download ./out
 muse-cli watch --thread <session-id>              # tail one side chat
 
 muse-cli feed --limit 5
@@ -220,6 +224,7 @@ found during reverse engineering.
 git clone https://github.com/nikships/muse-cli.git
 cd muse-cli
 uv run muse-cli --help
+uv run python -m unittest discover -s tests   # unit tests (no network)
 ```
 
 ```

@@ -68,6 +68,13 @@ chat / feed / goals / ideas / sessions / ...
   the stateful Noise decrypt (fatal BAD_DECRYPT). `Gateway` serializes
   receives with a lock as a backstop, but callers must still keep exactly
   one frame consumer at a time (`send` makes sequential unary calls only).
+- **Agent files** (`sandbox://workspace/<p>` in `payload.data.videos[]` /
+  `images[]` / `fallback_text`): each entry carries `mime`, `byte_len` and
+  `variants.original = https://<vm>.metaaivm.com/media/raw/workspace/<p>`.
+  The bytes come from `GET /media/raw/workspace/<p>` on the VM. That route is
+  not in `routes.json`; sent as a raw-path daemon request over the Noise
+  tunnel it returns the file (body chunks). `Gateway.download_file()` wraps
+  this. `artifacts.fetch_url` is unrelated (needs `project_dir`).
 - `session.start`: `{method: "/api/session/start", params: {origin: "fresh",
   lifecycle: "persistent", title?}}`.
 - `session.rename`: flat `{session_id, title}`. pin/unpin/archive/unarchive/

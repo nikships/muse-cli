@@ -139,6 +139,10 @@ muse-cli send "message" --wait 120                      # send + wait for the re
 muse-cli send "message" --thread <session-id> --wait 0  # fire and forget to a side chat
 muse-cli watch --timeout 60                             # tail live agent events
 muse-cli watch --thread <session-id>                    # tail one side chat
+muse-cli files --limit 20                               # images/videos the agent produced
+muse-cli download <seq|message-id|sandbox://...> -o DIR # save them locally
+muse-cli history --limit 3 --download DIR               # save files from these messages
+muse-cli send "make an image of X" --wait 300 --download DIR
 muse-cli feed --limit 5
 muse-cli goals
 muse-cli ideas
@@ -170,6 +174,10 @@ only for methods with no wrapper.
   is matched as a genuine answer, not background chatter.
 - `send --wait 0` is fire-and-forget (no polling).
 - `history` without `--thread` reads the main chat only.
+- Agent media shows up as `sandbox://workspace/...` paths, often in a
+  separate `delta.presentation` event after the text reply. `download` looks
+  up a message id or seq in the last `--limit` messages (main chat unless
+  `--thread`); existing files are skipped unless `-f`.
 - The gateway API is unversioned. Whole classes of calls failing at once means
   the protocol drifted: see `docs/PROTOCOL.md` for the re-derivation notes,
   don't guess at crypto or framing.
