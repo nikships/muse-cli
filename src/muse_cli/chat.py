@@ -6,6 +6,13 @@ reader. Picks up the conversation you used last. Type /help for commands.
 import json
 import os
 import time
+# Enable GNU readline / libedit for line editing, history, and proper
+# CJK/wide-character deletion (wcwidth). It is a standard library C extension,
+# but unavailable on native Windows or stripped/minimal Python installations.
+try:
+    import readline
+except ImportError:
+    readline = None
 
 from .cli import CONFIG_DIR, cmd_auth_export, connect, fmt_event, load_config
 from .gateway import AuthError, GatewayError
@@ -14,6 +21,7 @@ WAIT = 300   # seconds to wait for the first reply
 QUIET = 10   # seconds of silence after a reply before taking the next message
 POLL = 1     # seconds between history reads while waiting for a reply
 STATE = os.path.join(CONFIG_DIR, "chat.json")
+HISTFILE = os.path.join(CONFIG_DIR, "chat_history")
 
 HELP = """Commands:
   /chats          list your conversations
@@ -193,6 +201,11 @@ def start():
 
 
 def cmd_chat(_args):
+    if readline is not None:
+        try:
+            readline.read_history_file(HISTFILE)
+        except OSError:
+            pass
     chat = start()
     print(f"Muse chat, in: {chat.st['title']}. Type /help for commands, /exit to quit.")
     chat.show_history(3)
@@ -219,5 +232,12 @@ def cmd_chat(_args):
     except KeyboardInterrupt:
         pass
     finally:
+        if readline is not None:
+            try:
+                os.makedirs(CONFIG_DIR, exist_ok=True)
+                readline.set_history_length(1000)
+                readline.write_history_file(HISTFILE)
+            except OSError:
+                pass
         chat.gw.close()
     print("\nBye.")
