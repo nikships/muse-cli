@@ -7,87 +7,54 @@
 - `pyproject.toml` holds all packaging metadata (hatchling). The version is
   read from `__version__` in `src/muse_cli/__init__.py`; that is the only
   place it lives.
-- `.github/workflows/publish.yml` builds and smoke-tests on every push to
-  `main` and on PRs, and publishes to PyPI only on `v*` tags.
+- `.github/workflows/publish.yml` tests, builds, and smoke-tests PRs. Every
+  push to `main` automatically bumps the patch version, commits and tags
+  the tested version, publishes to PyPI, and creates a GitHub release.
+- `scripts/bump_version.py` picks the next patch above the package version
+  and existing stable release tags. Its regression tests are in
+  `tests/test_release.py`. Run all tests with
+  `uv run python -m unittest discover -s tests -v`.
 
 ## Cutting a release
 
-When asked to "cut a release", "publish a new version", or similar, follow
-these steps in order. Stop and report if any step fails.
+Normal releases are automatic: push approved changes to `main`, then watch
+the `publish.yml` workflow and verify the published version. Do not manually
+bump or tag a routine patch release. Never commit or push without the user's
+authorization.
 
-1. **Pick the version.** Use the version the user gave. If they didn't give
-   one, propose one using semantic versioning (patch for fixes, minor for
-   new features or behavior changes, major for breaking CLI changes) and
-   confirm it with them. Check it is unused:
+The workflow queues release runs (up to GitHub's 100-pending-run limit),
+checks out current `main`, bumps the patch, and validates before atomically
+pushing the version commit and tag. PR jobs have read-only permissions.
+Bot pushes use `GITHUB_TOKEN`, so they do not start another release.
+Publishing runs in the same workflow, not a second tag-triggered run.
 
-   ```bash
-   git fetch --tags origin
-   git tag -l 'v*'
-   curl -s https://pypi.org/pypi/muse-cli/json | python3 -c 'import sys,json;print(sorted(json.load(sys.stdin)["releases"]))'
-   ```
+If `main` changes during validation, the atomic push fails without publishing
+or creating a remote tag. Rerun the failed workflow from the beginning to
+validate the latest main. Never force-push to bypass this check.
 
-   Never reuse a version. `v0.1.0` exists as a GitHub-only tag from before
-   PyPI publishing; PyPI releases start at 0.2.0.
+For an explicit major/minor release, agree on the version first. The
+automatic increment is always a patch; setting the source version to
+`X.Y.Z` before pushing produces at least `X.Y.(Z+1)`.
 
-2. **Check the working tree.** Be on `main`, up to date with `origin/main`,
-   with no uncommitted changes (`git status -sb`). Git author identity must
-   already be configured; never set it yourself.
+Manual `v*` tag pushes remain supported for recovery or explicitly requested
+releases. The tag must match `__version__`, be unused on PyPI, and point to
+the intended tested source. The workflow publishes it without another bump.
+Never push both main and a manual release tag for the same change; that
+would schedule two releases. `v0.1.0` is a historical GitHub-only tag; PyPI
+releases start at 0.2.0.
 
-3. **Bump the version** in `src/muse_cli/__init__.py`, nothing else.
-
-4. **Build and smoke-test locally:**
-
-   ```bash
-   rm -rf dist /tmp/muse-release && python3 -m venv /tmp/muse-release
-   /tmp/muse-release/bin/pip install -q build twine
-   /tmp/muse-release/bin/python -m build
-   /tmp/muse-release/bin/twine check --strict dist/*
-   /tmp/muse-release/bin/pip install -q dist/*.whl
-   /tmp/muse-release/bin/muse-cli --version   # must print the new version
-   rm -rf dist
-   ```
-
-5. **Commit and push the bump**, then wait for the build job on `main` to
-   pass:
-
-   ```bash
-   git commit -am "Bump version to X.Y.Z"
-   git push origin main
-   gh run list --workflow publish.yml --limit 1   # get the run id
-   gh run watch <run-id> --exit-status
-   ```
-
-6. **Tag and push the tag.** This is what publishes to PyPI:
-
-   ```bash
-   git tag -a vX.Y.Z -m "muse-cli X.Y.Z"
-   git push origin vX.Y.Z
-   gh run list --workflow publish.yml --limit 1
-   gh run watch <run-id> --exit-status
-   ```
-
-   The workflow checks the tag matches `__version__`, builds, uploads to
-   PyPI via trusted publishing (no token needed), and creates the GitHub
-   release with auto-generated notes and the built files attached. Do not
-   create the GitHub release by hand.
-
-7. **Verify it is live:**
-
-   ```bash
-   curl -s https://pypi.org/pypi/muse-cli/json | python3 -c 'import sys,json;print(json.load(sys.stdin)["info"]["version"])'
-   rm -rf /tmp/muse-verify && python3 -m venv /tmp/muse-verify
-   /tmp/muse-verify/bin/pip install -q --no-cache-dir muse-cli==X.Y.Z
-   /tmp/muse-verify/bin/muse-cli --version
-   ```
-
-   PyPI can take a minute to show a new version; retry before assuming
-   failure. Report the PyPI and GitHub release links when done.
+After publishing, check the PyPI JSON endpoint and install the exact version
+into an isolated environment with `uv` to verify `muse-cli --version` and
+`muse-cli chat --help`. PyPI may take a minute to show the new release.
+Report the PyPI and GitHub release links when done.
 
 ### If something goes wrong
 
-- **Failed before the PyPI upload step** (tag check, build, smoke test):
-  nothing was published. Fix the problem, then ask the user before deleting
-  and re-pushing the tag (`git tag -d vX.Y.Z && git push origin :refs/tags/vX.Y.Z`).
+- **Failed before the version/tag push:** nothing was published. Fix the
+  problem and rerun the workflow from the beginning.
+- **Version/tag pushed, but PyPI failed:** rerun only the failed jobs to
+  reuse the tested artifacts. Do not rerun the successful version-commit
+  job or delete/re-push the tag.
 - **Failed after the PyPI upload succeeded** (for example the GitHub release
   step): the version is live. Don't delete the tag. Fix the workflow, and
   create the missing GitHub release by hand if the user wants it.
