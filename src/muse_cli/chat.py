@@ -45,6 +45,13 @@ def save_state(st):
     json.dump(st, open(STATE, "w"), indent=2)
 
 
+def is_not_found(err):
+    """True if a GatewayError indicates a missing or deleted session."""
+    return isinstance(err, GatewayError) and (
+        err.status == 404 or "not_found" in str(err) or "session not found" in str(err)
+    )
+
+
 class Chat:
     def __init__(self):
         self.cfg = load_config()
@@ -69,7 +76,14 @@ class Chat:
         return out
 
     def show_history(self, n=10):
-        msgs = self.messages(n * 3)[-n:]
+        try:
+            msgs = self.messages(n * 3)[-n:]
+        except GatewayError as e:
+            if is_not_found(e) and self.st.get("session_id"):
+                print(f"Chat '{self.st.get('title')}' was deleted. Switching to main chat.")
+                self.switch(None, "main chat")
+                return
+            raise
         if not msgs:
             print("No messages here yet.")
         for who, text in msgs:
@@ -93,10 +107,17 @@ class Chat:
         return found
 
     def send(self, text):
-        seen = self.last_seq()
-        body = {"items": [{"type": "text", "text": text}],
-                "node_id": self.cfg["node_id"], "capabilities": {}, **self.scope()}
-        self.gw._open("chat.stream", body=body)
+        try:
+            seen = self.last_seq()
+            body = {"items": [{"type": "text", "text": text}],
+                    "node_id": self.cfg["node_id"], "capabilities": {}, **self.scope()}
+            self.gw._open("chat.stream", body=body)
+        except GatewayError as e:
+            if is_not_found(e) and self.st.get("session_id"):
+                print(f"Chat '{self.st.get('title')}' was deleted. Switching to main chat.")
+                self.switch(None, "main chat")
+                return
+            raise
         print("Muse is thinking...")
         deadline, got_any = time.time() + WAIT, False
         while time.time() < deadline:
@@ -208,7 +229,16 @@ def cmd_chat(_args):
             pass
     chat = start()
     print(f"Muse chat, in: {chat.st['title']}. Type /help for commands, /exit to quit.")
-    chat.show_history(3)
+    try:
+        chat.show_history(3)
+    except GatewayError as e:
+        if is_not_found(e) and chat.st.get("session_id"):
+            print(f"Chat '{chat.st.get('title')}' was deleted. Switching to main chat.")
+            chat.switch(None, "main chat")
+        else:
+            print(f"(Could not load history: {e})")
+    except Exception as e:
+        print(f"(Could not load history: {e})")
     try:
         while True:
             try:
@@ -223,6 +253,12 @@ def cmd_chat(_args):
                 chat.handle(line) if line.startswith("/") else chat.send(line)
             except AuthError:
                 print("Your login expired. Type /login to sign in again.")
+            except GatewayError as e:
+                if is_not_found(e) and chat.st.get("session_id"):
+                    print(f"Chat '{chat.st.get('title')}' was deleted. Switching to main chat.")
+                    chat.switch(None, "main chat")
+                else:
+                    print(f"Gateway error: {e}")
             except Exception as e:  # dropped connection: reconnect so the next try works
                 print(f"Connection problem ({e}). Reconnected; please try again.")
                 try:
