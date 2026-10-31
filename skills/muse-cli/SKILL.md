@@ -11,7 +11,8 @@ fails and report it.
 
 The `muse-cli` package (on PyPI) talks to the muse.ai personal gateway
 directly. No browser needed after the one-time cookie export. Every command
-prints JSON.
+prints JSON except the interactive chat (`muse-cli` with no arguments, or
+`muse-cli chat`), which is a human REPL. Agents should never run it.
 
 ## 1. Install
 
@@ -143,9 +144,9 @@ muse-cli files --limit 20                               # images/videos the agen
 muse-cli download <seq|message-id|sandbox://...> -o DIR # save them locally
 muse-cli history --limit 3 --download DIR               # save files from these messages
 muse-cli send "make an image of X" --wait 300 --download DIR
-muse-cli feed --limit 5
-muse-cli goals
-muse-cli ideas
+muse-cli feed --limit 5                                 # also: feed-status, feed-prompt
+muse-cli goals                                          # one goal: muse-cli goal <id>
+muse-cli ideas                                          # one idea: muse-cli idea <id>
 muse-cli unread
 muse-cli seen <thread-id>
 ```
@@ -173,6 +174,9 @@ only for methods with no wrapper.
   than the wait: the message still landed, confirm with `history`. The reply
   is matched as a genuine answer, not background chatter.
 - `send --wait 0` is fire-and-forget (no polling).
+- Running `muse-cli` with no command opens the interactive chat and blocks on
+  stdin. From an agent, always pass an explicit command such as `status` or
+  `send`.
 - `history` without `--thread` reads the main chat only.
 - Agent media shows up as `sandbox://workspace/...` paths, often in a
   separate `delta.presentation` event after the text reply. `download` looks
