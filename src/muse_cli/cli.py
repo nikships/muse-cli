@@ -522,6 +522,11 @@ def is_reply(ev, baseline):
 # unary call; at 4 s a finished reply sat unshown for up to 4 s.
 POLL = 1
 
+# With --download, how long the thread must stay quiet after the reply before
+# send collects files. Generated media arrives as separate events well after
+# the text (an image took ~20 s), so a short fixed sleep missed it.
+SETTLE = 15
+
 
 def cmd_send(args):
     cfg = load_config()
@@ -571,9 +576,26 @@ def cmd_send(args):
         result = {"sent": True, "stream": stream_sid}
         if reply and args.download:
             # Media often lands as separate presentation events after the
-            # text reply; give them a moment, then save every file newer
-            # than the baseline.
-            time.sleep(min(3, max(0, deadline - time.time())))
+            # text reply; wait for the thread to go quiet, then save every
+            # file newer than the baseline.
+            last_seq, quiet_since, settled = reply["seq"] or 0, time.time(), False
+            while time.time() < deadline:
+                if time.time() - quiet_since >= SETTLE:
+                    settled = True
+                    break
+                time.sleep(POLL)
+                try:
+                    h = gw.call_json("chat.history", body={"limit": 20, **scope})
+                except (GatewayError, TimeoutError):
+                    continue
+                except AuthError:
+                    break
+                seq = max([e.get("seq") or 0 for e in h.get("chat_events", [])] or [0])
+                if seq > last_seq:
+                    last_seq, quiet_since = seq, time.time()
+            if not settled:
+                result["download_note"] = ("stopped waiting before the thread went quiet; "
+                                           "files may be missing, check `muse-cli history --download`")
             try:
                 h = gw.call_json("chat.history", body={"limit": 20, **scope})
                 res = []
@@ -583,7 +605,7 @@ def cmd_send(args):
                             if r["path"] not in [x["path"] for x in res]:
                                 res.append(r)
                 result["downloads"] = save_resources(gw, res, args.download)
-            except (GatewayError, TimeoutError) as e:
+            except (AuthError, GatewayError, TimeoutError) as e:
                 result["download_error"] = str(e)
         if reply:
             result["reply"] = reply
@@ -738,14 +760,27 @@ def cmd_seen(args):
         gw.close()
 
 
+def start_session(gw, title=None):
+    res = gw.call_json("session.start",
+                       body={"method": "/api/session/start",
+                             "params": {"origin": "fresh", "lifecycle": "persistent"}})
+    # The server ignores a title on start, so name the chat afterwards.
+    sid = res.get("session_id") or res.get("id")
+    if title and sid:
+        # The chat already exists, so a failed rename must not hide its id.
+        try:
+            gw.call_json("session.rename", body={"session_id": sid, "title": title})
+            res["title"] = title
+        except (GatewayError, TimeoutError) as e:
+            res["title_error"] = str(e)
+            print(f"could not set the chat title: {e}", file=sys.stderr)
+    return res
+
+
 def cmd_session_start(args):
     gw = connect(load_config())
     try:
-        params = {"origin": "fresh", "lifecycle": "persistent"}
-        if args.title:
-            params["title"] = args.title
-        out(gw.call_json("session.start",
-                         body={"method": "/api/session/start", "params": params}))
+        out(start_session(gw, args.title))
     finally:
         gw.close()
 
@@ -860,7 +895,8 @@ def main():
     p.add_argument("text"); p.add_argument("--thread", default=None)
     p.add_argument("--wait", type=int, default=90, help="seconds to wait for reply (0 = don't)")
     p.add_argument("--download", metavar="DIR", default=None,
-                   help="save files the reply produced into DIR (needs --wait)")
+                   help="save files the reply produced into DIR (needs --wait); waits until the "
+                        "chat is quiet for 15 s, at most --wait")
     p.set_defaults(fn=cmd_send)
     p = sub.add_parser("files", help="list files (images/videos) in recent messages")
     p.add_argument("--thread", default=None); p.add_argument("--limit", type=int, default=20)
@@ -881,7 +917,8 @@ def main():
     p.set_defaults(fn=cmd_feed)
     sub.add_parser("feed-status", help="feed refresh status").set_defaults(fn=cmd_feed_status)
     p = sub.add_parser("feed-react", help="react to a feed unit")
-    p.add_argument("unit"); p.add_argument("reaction", nargs="?", default="love")
+    p.add_argument("unit"); p.add_argument("reaction", nargs="?", default="love",
+                   choices=["like", "love", "dislike"], help="default: love")
     p.set_defaults(fn=cmd_feed_react)
     sub.add_parser("feed-prompt", help="show feed prompt").set_defaults(fn=cmd_feed_prompt)
     sub.add_parser("goals", help="list goals").set_defaults(fn=cmd_goals)
@@ -889,7 +926,10 @@ def main():
     sub.add_parser("ideas", help="list idea cards").set_defaults(fn=cmd_ideas)
     p = sub.add_parser("idea", help="show one idea"); p.add_argument("id"); p.set_defaults(fn=cmd_idea)
     p = sub.add_parser("idea-exec", help="execute an idea (agent acts on it)")
-    p.add_argument("id"); p.add_argument("--thread", default=None); p.set_defaults(fn=cmd_idea_exec)
+    p.add_argument("id")
+    p.add_argument("--thread", default=None,
+                   help="side chat to run it in (the server may ignore this and use the main chat)")
+    p.set_defaults(fn=cmd_idea_exec)
     sub.add_parser("unread", help="unread counts").set_defaults(fn=cmd_unread)
     p = sub.add_parser("seen", help="mark a thread seen"); p.add_argument("thread")
     p.set_defaults(fn=cmd_seen)
@@ -922,6 +962,9 @@ def main():
     try:
         try:
             args.fn(args)
+            # Flush here: with a block-buffered pipe, a closed reader only
+            # surfaces at flush time, which would otherwise be after this handler.
+            sys.stdout.flush()
         except AuthError as e:
             print(f"auth error: {e}", file=sys.stderr)
             sys.exit(2)
@@ -931,6 +974,14 @@ def main():
         except TimeoutError as e:
             print(f"timeout: {e}", file=sys.stderr)
             sys.exit(4)
+        except BrokenPipeError:
+            # The reader (`head`, `jq -e`) closed early. Point stdout at devnull
+            # so the interpreter's exit-time flush does not raise again.
+            os.dup2(os.open(os.devnull, os.O_WRONLY), sys.stdout.fileno())
+            sys.exit(141)
+        except KeyboardInterrupt:
+            print(file=sys.stderr)
+            sys.exit(130)
     finally:
         finish_update_check(notice)
 

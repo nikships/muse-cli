@@ -83,8 +83,9 @@ Noise-XX WebSocket to the user's personal VM, carrying protobuf envelopes.
 - Keep stdout for machine-readable output and stderr for notices and errors.
   Users pipe the output into `jq` and other agents.
 - Exit codes come from `main()`: `2` for `AuthError` or bad arguments, `3` for
-  `GatewayError`, `4` for `TimeoutError`. Raise those exceptions instead of
-  calling `sys.exit` from deep helpers.
+  `GatewayError`, `4` for `TimeoutError`, `130` for Ctrl-C, and `141` when the
+  reader of a pipe closes early (both exit without a traceback). Raise those
+  exceptions instead of calling `sys.exit` from deep helpers.
 - Keep exactly one consumer of the WebSocket at a time. Concurrent
   `_read_frame` calls corrupt the Noise decrypt state.
 - `send` polls `chat.history` for the reply instead of using the live stream.

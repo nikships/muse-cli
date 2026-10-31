@@ -169,13 +169,13 @@ muse-cli watch --timeout 60                       # tail live agent events
 muse-cli files --limit 20                         # images/videos in recent messages
 muse-cli download <seq|message-id|sandbox://...> -o ./out   # save agent-made files
 muse-cli history --limit 3 --download ./out       # save files from these messages
-muse-cli send "make a cat video" --wait 300 --download ./out
+muse-cli send "make a cat video" --wait 300 --download ./out   # waits for the chat to go quiet (15 s), at most --wait
 muse-cli watch --thread <session-id>              # tail one side chat
 
 muse-cli unread                                   # unread counts
 muse-cli feed --limit 5
 muse-cli feed-status                              # also: feed-prompt
-muse-cli feed-react <unit-id> love
+muse-cli feed-react <unit-id> love                # or like, dislike
 muse-cli goals                                    # one goal: muse-cli goal <id>
 muse-cli ideas                                    # one idea: muse-cli idea <id>
 muse-cli idea-exec <idea-id>                      # agent acts on the idea

@@ -54,6 +54,9 @@ chat / feed / goals / ideas / sessions / ...
 - Genuine assistant replies have an **empty `reply_to_message_id`**; proactive
   pushes (Telegram drafts, background task updates) are self-referential
   there. That is how `send` tells a reply apart from background chatter.
+- Generated media arrives as a **separate** assistant event after the text
+  reply, ~20 s later for an image. `send --download` therefore waits until
+  the history seq has been quiet for `SETTLE` seconds before collecting files.
 - Live `chat.subscribe` events use **different shapes** (`delta.text_append`
   with `message_seq` + text chunks, `delta.message_done` with the full
   transcript) and only cover main-chat traffic: threaded replies never arrive
@@ -76,10 +79,15 @@ chat / feed / goals / ideas / sessions / ...
   tunnel it returns the file (body chunks). `Gateway.download_file()` wraps
   this. `artifacts.fetch_url` is unrelated (needs `project_dir`).
 - `session.start`: `{method: "/api/session/start", params: {origin: "fresh",
-  lifecycle: "persistent", title?}}`.
+  lifecycle: "persistent"}}`. A `title` param is accepted but ignored (the
+  chat stays untitled), so `start_session` follows up with `session.rename`.
 - `session.rename`: flat `{session_id, title}`. pin/unpin/archive/unarchive/
   delete: `{method: "/api/session/<op>", session_id}`.
-- `api.idea-cards.execute`: `{ideaCardId, mode: "full"}` plus path param.
+- `feed.unit.reaction`: `{reaction}` must be `like`, `love` or `dislike` (the
+  server's 400 lists them).
+- `api.idea-cards.execute`: `{ideaCardId, mode: "full"}` plus path param. A
+  `session_id` in the body did not move the run into that side chat; the
+  user message and the agent's reply landed in the main chat.
 - POSTs to muse.ai need browser `Sec-Fetch-*` headers or they return 403.
 - `auth export` reads cookies from the user's own Google Chrome through
   agent-browser `--auto-connect`. Chrome 144+ shares that profile only after

@@ -14,7 +14,7 @@ try:
 except ImportError:
     readline = None
 
-from .cli import CONFIG_DIR, cmd_auth_export, connect, fmt_event, load_config
+from .cli import CONFIG_DIR, cmd_auth_export, connect, fmt_event, load_config, start_session
 from .gateway import AuthError, GatewayError
 
 WAIT = 300   # seconds to wait for the first reply
@@ -168,11 +168,7 @@ class Chat:
             print("No conversation with that number. Type /chats to see them.")
 
     def new_chat(self, title):
-        params = {"origin": "fresh", "lifecycle": "persistent"}
-        if title:
-            params["title"] = title
-        d = self.gw.call_json("session.start",
-                              body={"method": "/api/session/start", "params": params})
+        d = start_session(self.gw, title)
         self.switch(d.get("session_id") or d.get("id"), title or "new conversation")
 
     def reconnect(self):

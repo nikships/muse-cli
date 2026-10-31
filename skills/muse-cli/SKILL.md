@@ -174,6 +174,13 @@ only for methods with no wrapper.
   than the wait: the message still landed, confirm with `history`. The reply
   is matched as a genuine answer, not background chatter.
 - `send --wait 0` is fire-and-forget (no polling).
+- `send --download DIR` keeps waiting after the reply until the thread has been
+  quiet for 15 s (so it always takes at least that long), because generated
+  images and videos arrive as separate messages after the text. The wait stops
+  at `--wait`; if that comes first the result has a `download_note` and files
+  may be missing.
+- `idea-exec --thread` may be ignored by the server; the run can land in the
+  main chat.
 - Running `muse-cli` with no command opens the interactive chat and blocks on
   stdin. From an agent, always pass an explicit command such as `status` or
   `send`.
