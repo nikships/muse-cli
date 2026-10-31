@@ -40,8 +40,8 @@ Noise-XX WebSocket to the user's personal VM, carrying protobuf envelopes.
 ## Setup and run
 
 - Run from a checkout: `uv run muse-cli --help`
-- `uv run` writes an untracked `uv.lock`. The repo does not track one, so do
-  not commit it.
+- `uv run` writes a `uv.lock`. It is gitignored because the repo does not
+  track one, so do not force-add it.
 - Real commands need a logged-in cookie file at
   `~/.config/muse-cli/cookies.txt`. Without it they exit with an
   `auth error`. Use unit tests and `--help` for checks that must not touch the
