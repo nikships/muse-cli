@@ -904,7 +904,10 @@ def main():
             p.add_argument("title")
         p.set_defaults(fn=cmd_session_op(kind))
     sub.add_parser("wake", help="request a VM wake").set_defaults(fn=cmd_wake)
-    sub.add_parser("update", help="upgrade this install to the latest release").set_defaults(fn=cmd_update)
+    p = sub.add_parser("update", help="upgrade this install and its agent skill to the latest release")
+    p.add_argument("--skill", action="store_true",
+                   help="only install or refresh the agent skill (no package upgrade)")
+    p.set_defaults(fn=cmd_update)
     p = sub.add_parser("raw", help="call any gateway method (escape hatch)")
     p.add_argument("method"); p.add_argument("--body", default=None)
     p.add_argument("--param", action="append", default=[], help="path param k=v (repeatable)")

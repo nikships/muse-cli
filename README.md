@@ -47,7 +47,7 @@ to `~/.agents/skills/muse-cli`:
 curl -fsSL https://raw.githubusercontent.com/nikships/muse-cli/main/install.sh | bash
 ```
 
-Upgrade with `muse-cli update`. In a terminal it also checks PyPI once a day and, when a newer release exists, prints that command on stderr. It does not upgrade itself. Set `MUSE_NO_UPDATE_CHECK=1` to silence the notice. The check stays quiet when output is piped or `CI` is set. Remove with `uv tool uninstall muse-cli`.
+Upgrade with `muse-cli update`. It also refreshes the agent skill if you installed one (the skill ships inside the package, so it always matches the CLI). `muse-cli update --skill` refreshes or installs just the skill, with no package upgrade, which is handy after `pip` or `pipx` installs. In a terminal it also checks PyPI once a day and, when a newer release exists, prints that command on stderr. It does not upgrade itself. Set `MUSE_NO_UPDATE_CHECK=1` to silence the notice. The check stays quiet when output is piped or `CI` is set. Remove with `uv tool uninstall muse-cli`.
 
 Logging in is a separate one-time step. Chrome shares its cookies after you
 turn on remote debugging. Follow [Log in once](#log-in-once) before running
@@ -241,6 +241,7 @@ src/muse_cli/
   chat.py            interactive chat (the default command)
   gateway.py         gateway client (auth, Noise transport, subscriptions)
   update.py          daily update notice and `muse-cli update`
+  skill.py           installs and refreshes the bundled agent skill
   routes.json        258 gateway methods extracted from the web client
   desc0.bin          protobuf descriptors for the wire framing
   desc1.bin

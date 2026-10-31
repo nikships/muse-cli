@@ -23,7 +23,12 @@ Noise-XX WebSocket to the user's personal VM, carrying protobuf envelopes.
 - `src/muse_cli/gateway.py`: `Gateway` client (tokens, Noise transport,
   request/subscribe/download), `AuthError`, `GatewayError`, `load_cookies`.
 - `src/muse_cli/chat.py`: the interactive REPL (`muse-cli` with no command).
-- `src/muse_cli/update.py`: daily PyPI update notice and `muse-cli update`.
+- `src/muse_cli/update.py`: daily PyPI update notice and `muse-cli update`,
+  which also refreshes an installed skill.
+- `src/muse_cli/skill.py`: copies the bundled `SKILL.md` to
+  `~/.agents/skills/muse-cli` (`MUSE_CLI_SKILLS` overrides the root). The wheel
+  carries `skills/muse-cli/SKILL.md` as `muse_cli/SKILL.md` via
+  `force-include` in `pyproject.toml`, so keep that mapping.
 - `src/muse_cli/routes.json`, `desc0.bin`, `desc1.bin`: the 258 gateway
   methods and the protobuf descriptors for the framing. Generated data, so do
   not hand-edit.
@@ -49,7 +54,8 @@ Noise-XX WebSocket to the user's personal VM, carrying protobuf envelopes.
 - State lives in `~/.config/muse-cli/` (`config.json`, `cookies.txt`,
   `chat.json`, `chat_history`, `update.json`).
 - Environment variables: `MUSE_VM_ID` (skip VM discovery), `MUSE_NODE_ID`
-  (fixed device id), `MUSE_NO_UPDATE_CHECK=1` (silence the update notice).
+  (fixed device id), `MUSE_NO_UPDATE_CHECK=1` (silence the update notice),
+  `MUSE_CLI_SKILLS` (skills root used by `update`, same as `install.sh`).
 
 ## Testing
 

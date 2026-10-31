@@ -188,6 +188,7 @@ only for methods with no wrapper.
 - Respect rate limits. Writes (send, react, execute, session ops) act as the
   user in their agent: announce them before running, never loop them.
 - A stderr line `A new release of muse-cli is available` is an upgrade
-  notice, not a failed command. Upgrade with `muse-cli update`. The check
+  notice, not a failed command. Upgrade with `muse-cli update`, which also refreshes this skill
+  (`muse-cli update --skill` refreshes only the skill). The check
   runs at most once a day, only in a terminal, and never changes the install
   by itself. `MUSE_NO_UPDATE_CHECK=1` silences it.
