@@ -15,6 +15,7 @@ import re
 import shutil
 import sys
 import time
+import urllib.parse
 
 from . import __version__
 from .gateway import Gateway, AuthError, GatewayError, load_cookies
@@ -29,7 +30,8 @@ def load_config():
     import secrets
     cfg = {}
     if os.path.exists(CONFIG_FILE):
-        cfg = json.load(open(CONFIG_FILE))
+        with open(CONFIG_FILE) as fh:
+            cfg = json.load(fh)
     changed = False
     cfg.setdefault("cookies_file", COOKIES_FILE)
     if "vm_id" not in cfg and os.environ.get("MUSE_VM_ID"):
@@ -42,7 +44,8 @@ def load_config():
             changed = True
     if changed:
         os.makedirs(CONFIG_DIR, exist_ok=True)
-        json.dump(cfg, open(CONFIG_FILE, "w"), indent=2)
+        with open(CONFIG_FILE, "w") as fh:
+            json.dump(cfg, fh, indent=2)
     return cfg
 
 
@@ -284,9 +287,11 @@ def cmd_auth_export(_args):
         ]))
     if os.path.exists(COOKIES_FILE):
         os.replace(COOKIES_FILE, COOKIES_FILE + ".bak")
-    with open(COOKIES_FILE, "w") as fh:
+    # Create the file at 0600 so the cookies are never readable by others,
+    # not even between the write and a later chmod.
+    fd = os.open(COOKIES_FILE, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    with os.fdopen(fd, "w") as fh:
         fh.write("\n".join(lines) + "\n")
-    os.chmod(COOKIES_FILE, 0o600)
     print(f"saved {len(jar)} muse.ai cookies to {COOKIES_FILE}")
 
 
@@ -405,7 +410,9 @@ def event_resources(ev):
 
 
 def _local_name(path, directory):
-    name = os.path.basename(path.split("?", 1)[0].rstrip("/")) or "download"
+    name = os.path.basename(urllib.parse.unquote(path.split("?", 1)[0]).rstrip("/"))
+    if name in ("", ".", ".."):
+        name = "download"
     return os.path.join(directory, name)
 
 
@@ -897,7 +904,10 @@ def main():
             p.add_argument("title")
         p.set_defaults(fn=cmd_session_op(kind))
     sub.add_parser("wake", help="request a VM wake").set_defaults(fn=cmd_wake)
-    sub.add_parser("update", help="upgrade this install to the latest release").set_defaults(fn=cmd_update)
+    p = sub.add_parser("update", help="upgrade this install and its agent skill to the latest release")
+    p.add_argument("--skill", action="store_true",
+                   help="only install or refresh the agent skill (no package upgrade)")
+    p.set_defaults(fn=cmd_update)
     p = sub.add_parser("raw", help="call any gateway method (escape hatch)")
     p.add_argument("method"); p.add_argument("--body", default=None)
     p.add_argument("--param", action="append", default=[], help="path param k=v (repeatable)")

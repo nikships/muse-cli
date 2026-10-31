@@ -1,14 +1,14 @@
 # Protocol notes
 
-How `muse` talks to the muse.ai personal gateway. Derived from the web app's
-own client bundle and verified live. Internal APIs are unversioned and can
-change without notice; if calls start failing, re-derive from a fresh bundle
-(HAR capture + the `derive-client` workflow).
+How `muse-cli` talks to the muse.ai personal gateway. Derived from the web
+app's own client bundle and verified live. Internal APIs are unversioned and
+can change without notice; if calls start failing, re-derive from a fresh
+bundle (for example a HAR capture of the web app).
 
 ## Layers
 
 ```
-muse CLI
+muse-cli
   │  HTTPS (browser TLS fingerprint via curl-impersonated requests)
   ▼
 muse.ai            cookies → POST /api/auth/check → access_token

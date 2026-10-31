@@ -13,6 +13,7 @@ import time
 import urllib.request
 
 from . import __version__
+from .skill import skill_path
 
 CHECK_INTERVAL = 24 * 60 * 60
 FAIL_BACKOFF = 60 * 60
@@ -139,7 +140,27 @@ def finish_update_check(holder):
     )
 
 
-def cmd_update(_args):
+def sync_skill_cmd():
+    """Install or refresh the agent skill. Returns an exit code."""
+    from .skill import sync_skill
+    try:
+        status, path = sync_skill(create=True)
+    except OSError as e:
+        print(f"could not write the skill: {e}", file=sys.stderr)
+        return 1
+    messages = {
+        "updated": f"skill updated: {path}",
+        "installed": f"skill installed: {path}",
+        "current": f"skill already up to date: {path}",
+        "no-source": "this install has no bundled skill; run install.sh to fetch it",
+    }
+    print(messages[status], file=sys.stderr)
+    return 1 if status == "no-source" else 0
+
+
+def cmd_update(args):
+    if args.skill:
+        raise SystemExit(sync_skill_cmd())
     argv = upgrade_argv()
     if argv[0] != sys.executable and shutil.which(argv[0]) is None:
         print(f"{argv[0]} is not on PATH.", file=sys.stderr)
@@ -147,4 +168,11 @@ def cmd_update(_args):
         sys.exit(1)
     print(f"running: {upgrade_command()}", file=sys.stderr)
     import subprocess
-    raise SystemExit(subprocess.call(argv))
+    code = subprocess.call(argv)
+    if code == 0 and os.path.exists(skill_path()):
+        # The upgrade replaced this package on disk, so refresh the skill from
+        # a new interpreter that loads the new version's bundled copy.
+        refreshed = subprocess.call([sys.executable, "-m", "muse_cli", "update", "--skill"])
+        if refreshed != 0:
+            print("skill not refreshed; run `muse-cli update --skill`", file=sys.stderr)
+    raise SystemExit(code)

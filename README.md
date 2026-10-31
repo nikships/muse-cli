@@ -47,7 +47,7 @@ to `~/.agents/skills/muse-cli`:
 curl -fsSL https://raw.githubusercontent.com/nikships/muse-cli/main/install.sh | bash
 ```
 
-Upgrade with `muse-cli update`. In a terminal it also checks PyPI once a day and, when a newer release exists, prints that command on stderr. It does not upgrade itself. Set `MUSE_NO_UPDATE_CHECK=1` to silence the notice. The check stays quiet when output is piped or `CI` is set. Remove with `uv tool uninstall muse-cli`.
+Upgrade with `muse-cli update`. It also refreshes the agent skill if you installed one (the skill ships inside the package, so it always matches the CLI). `muse-cli update --skill` refreshes or installs just the skill, with no package upgrade, which is handy after `pip` or `pipx` installs. In a terminal it also checks PyPI once a day and, when a newer release exists, prints that command on stderr. It does not upgrade itself. Set `MUSE_NO_UPDATE_CHECK=1` to silence the notice. The check stays quiet when output is piped or `CI` is set. Remove with `uv tool uninstall muse-cli`.
 
 Logging in is a separate one-time step. Chrome shares its cookies after you
 turn on remote debugging. Follow [Log in once](#log-in-once) before running
@@ -172,10 +172,12 @@ muse-cli history --limit 3 --download ./out       # save files from these messag
 muse-cli send "make a cat video" --wait 300 --download ./out
 muse-cli watch --thread <session-id>              # tail one side chat
 
+muse-cli unread                                   # unread counts
 muse-cli feed --limit 5
+muse-cli feed-status                              # also: feed-prompt
 muse-cli feed-react <unit-id> love
-muse-cli goals
-muse-cli ideas
+muse-cli goals                                    # one goal: muse-cli goal <id>
+muse-cli ideas                                    # one idea: muse-cli idea <id>
 muse-cli idea-exec <idea-id>                      # agent acts on the idea
 
 muse-cli session-start --title "trip planning"    # new side chat
@@ -231,16 +233,25 @@ uv run python -m unittest discover -s tests   # unit tests (no network)
 muse-cli/
 assets/              README artwork (generated with Muse Image)
 docs/PROTOCOL.md     protocol reference for re-derivation
+scripts/             release version bump (used by CI)
+site/                landing page (Firebase Hosting)
 skills/muse-cli/     agent skill
 src/muse_cli/
   cli.py             argument parsing and all commands
+  chat.py            interactive chat (the default command)
   gateway.py         gateway client (auth, Noise transport, subscriptions)
+  update.py          daily update notice and `muse-cli update`
+  skill.py           installs and refreshes the bundled agent skill
   routes.json        258 gateway methods extracted from the web client
   desc0.bin          protobuf descriptors for the wire framing
   desc1.bin
+tests/               unit tests (no network)
 install.sh           CLI + skill installer
 pyproject.toml
 ```
+
+See [AGENTS.md](https://github.com/nikships/muse-cli/blob/main/AGENTS.md) for
+release flow and contributor notes. Merging to `main` publishes a release.
 
 ## Setup notes
 
