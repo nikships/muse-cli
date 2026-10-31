@@ -3,447 +3,200 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>muse-cli — talk to your Muse agent from the terminal</title>
-<meta name="description" content="A command-line client for your personal muse.ai AI agent: chat, automate, and manage side chats, feed, goals, ideas, and sessions from the terminal. No browser needed." />
+<title>muse-cli: a command-line client for your muse.ai agent</title>
+<meta name="description" content="Chat with your personal muse.ai agent from the terminal, and manage side chats, feed, goals, ideas, and sessions. Every command prints JSON." />
 <meta property="og:type" content="website" />
 <meta property="og:title" content="muse-cli" />
-<meta property="og:description" content="Chat with your personal muse.ai AI agent from the terminal. Every command prints JSON. Ships an agent skill." />
-<meta property="og:image" content="https://muse-cli-site.web.app/hero.webp" />
-<meta property="og:url" content="https://muse-cli-site.web.app/" />
+<meta property="og:description" content="Chat with your personal muse.ai agent from the terminal. Every command prints JSON. Ships an agent skill." />
+<meta property="og:image" content="https://muse-cli-web.web.app/hero.webp" />
+<meta property="og:url" content="https://muse-cli-web.web.app/" />
 <meta name="twitter:card" content="summary_large_image" />
 <meta name="twitter:title" content="muse-cli" />
-<meta name="twitter:description" content="Chat with your personal muse.ai AI agent from the terminal." />
-<meta name="twitter:image" content="https://muse-cli-site.web.app/hero.webp" />
-<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect x='8' y='8' width='84' height='84' rx='18' fill='%23141828'/><text x='50' y='68' font-size='52' text-anchor='middle' fill='%2358a6ff' font-family='monospace'>&gt;_</text></svg>" />
-<link rel="preconnect" href="https://fonts.googleapis.com" />
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+<meta name="twitter:description" content="Chat with your personal muse.ai agent from the terminal." />
+<meta name="twitter:image" content="https://muse-cli-web.web.app/hero.webp" />
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect x='8' y='8' width='84' height='84' rx='18' fill='%23141828'/><text x='50' y='68' font-size='52' text-anchor='middle' fill='%234cc38a' font-family='monospace'>&gt;_</text></svg>" />
 <style>
   :root {
     --bg: #0a0e14;
-    --bg-soft: #0d131d;
     --panel: #111927;
     --line: #1e2a3f;
     --text: #e9eff8;
     --body: #a7b4c9;
-    --dim: #6b7a93;
+    --dim: #7a89a3;
     --accent: #4cc38a;
-    --accent-dim: rgba(76, 195, 138, 0.12);
-    --mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
-    --display: "Outfit", -apple-system, "Segoe UI", sans-serif;
-    --z-grain: 50;
+    --mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, monospace;
+    --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, Roboto, sans-serif;
   }
   * { box-sizing: border-box; margin: 0; padding: 0; }
-  html { scroll-behavior: smooth; }
-  body {
-    background: var(--bg);
-    color: var(--text);
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, sans-serif;
-    line-height: 1.65;
-    overflow-x: hidden;
-  }
-  body::after {
-    content: "";
-    position: fixed;
-    inset: 0;
-    z-index: var(--z-grain);
-    pointer-events: none;
-    opacity: 0.05;
-    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2'/%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23n)' opacity='1'/%3E%3C/svg%3E");
-  }
-  ::selection { background: rgba(76, 195, 138, 0.3); }
-  .skip {
-    position: absolute; left: -9999px; top: 0;
-    background: var(--accent); color: #04120a;
-    padding: 8px 16px; border-radius: 0 0 8px 0; font-weight: 600; z-index: 100;
-  }
+  body { background: var(--bg); color: var(--text); font-family: var(--sans); line-height: 1.6; }
+  a { color: var(--accent); }
+  a:focus-visible, button:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; border-radius: 4px; }
+  .skip { position: absolute; left: -9999px; top: 0; background: var(--accent); color: #04120a; padding: 8px 16px; font-weight: 600; z-index: 10; }
   .skip:focus { left: 0; }
-  a:focus-visible, button:focus-visible {
-    outline: 2px solid var(--accent);
-    outline-offset: 3px;
-    border-radius: 6px;
-  }
 
-  /* Nav */
-  nav {
-    position: sticky; top: 0; z-index: 40;
-    backdrop-filter: blur(14px);
-    -webkit-backdrop-filter: blur(14px);
-    background: rgba(10, 14, 20, 0.75);
-    border-bottom: 1px solid var(--line);
-  }
-  .nav-inner {
-    max-width: 1120px; margin: 0 auto; padding: 14px 28px;
-    display: flex; align-items: center; gap: 28px;
-  }
-  .logo { font-family: var(--mono); font-weight: 600; font-size: 1rem; color: var(--text); text-decoration: none; }
-  .logo b { color: var(--accent); font-weight: 600; }
-  .nav-links { display: flex; gap: 22px; margin-left: auto; align-items: center; }
-  .nav-links a { color: var(--dim); text-decoration: none; font-size: 0.9rem; transition: color 200ms; }
-  .nav-links a:hover { color: var(--text); }
-  .nav-cta {
-    font-family: var(--mono); font-size: 0.82rem;
-    border: 1px solid var(--line); color: var(--text);
-    padding: 7px 16px; border-radius: 8px; text-decoration: none;
-    transition: border-color 200ms, transform 150ms, background 200ms;
-  }
-  .nav-cta:hover { border-color: var(--accent); background: var(--accent-dim); }
-  .nav-cta:active { transform: scale(0.97); }
+  .wrap { max-width: 880px; margin: 0 auto; padding: 0 24px; }
+  header { border-bottom: 1px solid var(--line); }
+  header .wrap { display: flex; align-items: center; gap: 24px; padding-top: 16px; padding-bottom: 16px; }
+  .logo { font-family: var(--mono); font-weight: 600; color: var(--text); text-decoration: none; }
+  header nav { margin-left: auto; display: flex; gap: 20px; }
+  header nav a { color: var(--body); text-decoration: none; font-size: 0.92rem; }
+  header nav a:hover { color: var(--text); }
 
-  main { max-width: 1120px; margin: 0 auto; padding: 0 28px 40px; }
+  .intro { padding: 72px 0 40px; }
+  h1 { font-size: clamp(2rem, 5vw, 3rem); line-height: 1.12; letter-spacing: -0.02em; margin-bottom: 16px; text-wrap: balance; }
+  .lede { color: var(--body); font-size: 1.1rem; max-width: 56ch; margin-bottom: 28px; }
 
-  /* Hero: asymmetric, left aligned */
-  .hero {
-    display: grid; grid-template-columns: 1.05fr 0.95fr; gap: 48px;
-    align-items: center;
-    padding: 88px 0 72px;
-  }
-  .eyebrow {
-    font-family: var(--mono); font-size: 0.78rem; letter-spacing: 0.14em;
-    text-transform: uppercase; color: var(--accent);
-    display: flex; align-items: center; gap: 10px; margin-bottom: 20px;
-  }
-  .eyebrow::before { content: ""; width: 28px; height: 1px; background: var(--accent); }
-  h1 {
-    font-family: var(--display); font-weight: 800;
-    font-size: clamp(2.6rem, 5.4vw, 4rem);
-    line-height: 1.04; letter-spacing: -0.03em;
-    text-wrap: balance; margin-bottom: 20px;
-  }
-  h1 .muted { color: var(--dim); font-weight: 600; }
-  .lede { color: var(--body); font-size: 1.08rem; max-width: 44ch; margin-bottom: 30px; }
-  .hero-actions { display: flex; gap: 14px; align-items: center; flex-wrap: wrap; margin-bottom: 26px; }
-  .btn {
-    display: inline-block; padding: 13px 28px; border-radius: 10px;
-    font-weight: 600; font-size: 0.95rem; text-decoration: none;
-    transition: transform 150ms, box-shadow 200ms, background 200ms, border-color 200ms;
-  }
-  .btn.primary { background: var(--accent); color: #04120a; box-shadow: 0 8px 32px -8px rgba(76, 195, 138, 0.45); }
-  .btn.primary:hover { transform: translateY(-2px); box-shadow: 0 12px 40px -8px rgba(76, 195, 138, 0.55); }
-  .btn.primary:active { transform: scale(0.98); }
-  .btn.ghost { border: 1px solid var(--line); color: var(--text); background: var(--panel); }
-  .btn.ghost:hover { border-color: var(--accent); transform: translateY(-2px); }
-  .btn.ghost:active { transform: scale(0.98); }
-  .hero-meta { font-family: var(--mono); font-size: 0.8rem; color: var(--dim); display: flex; gap: 18px; flex-wrap: wrap; }
-  .hero-meta span::before { content: "› "; color: var(--accent); }
-
-  /* Terminal card with depth */
-  .term {
-    background: #070b12;
-    border: 1px solid var(--line);
-    border-radius: 14px;
-    overflow: hidden;
-    box-shadow: 0 32px 80px -24px rgba(0, 0, 0, 0.7), 0 0 0 1px rgba(76, 195, 138, 0.06);
-    transform: rotate(0.6deg);
-    transition: transform 300ms ease, box-shadow 300ms ease;
-  }
-  .term:hover { transform: rotate(0deg) translateY(-3px); }
-  .term-bar {
-    display: flex; align-items: center; gap: 8px;
-    padding: 12px 16px; border-bottom: 1px solid var(--line);
-    background: rgba(255, 255, 255, 0.02);
-  }
-  .dot { width: 11px; height: 11px; border-radius: 50%; }
-  .dot.r { background: #ff5f57; } .dot.y { background: #febc2e; } .dot.g { background: #28c840; }
-  .term-title { font-family: var(--mono); font-size: 0.75rem; color: var(--dim); margin-left: 8px; }
-  .term-body { padding: 20px 20px 24px; font-family: var(--mono); font-size: 0.84rem; line-height: 1.8; }
-  .term-body .p { color: var(--accent); }
-  .term-body .c { color: var(--dim); }
-  .term-body .o { color: var(--body); }
-
-  section.block { padding: 60px 0 8px; }
-  .section-head { margin-bottom: 30px; max-width: 640px; }
-  .section-head h2 {
-    font-family: var(--display); font-weight: 700;
-    font-size: clamp(1.6rem, 3vw, 2.2rem);
-    letter-spacing: -0.02em; line-height: 1.15; margin: 14px 0 10px;
-  }
-  .section-head p { color: var(--body); }
-  .kicker {
-    font-family: var(--mono); font-size: 0.75rem; letter-spacing: 0.14em;
-    text-transform: uppercase; color: var(--accent);
-  }
-
-  /* Hero video */
-  .video-frame { position: relative; }
-  .video-frame video { display: block; width: 100%; height: auto; aspect-ratio: 16 / 9; background: #070b12; }
-  .sound {
-    position: absolute; right: 16px; bottom: 16px;
-    font-family: var(--mono); font-size: 0.78rem;
-    background: rgba(7, 11, 18, 0.8); color: var(--text);
-    border: 1px solid var(--line); border-radius: 8px;
-    padding: 7px 14px; cursor: pointer;
-    backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
-    transition: border-color 200ms, transform 150ms, background 200ms;
-  }
-  .sound:hover { border-color: var(--accent); background: rgba(7, 11, 18, 0.92); }
-  .sound:active { transform: scale(0.97); }
-
-  /* Install strip */
-  .install-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
-  .cmd { position: relative; background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 18px; transition: border-color 200ms; }
-  .cmd:hover { border-color: #2c3d5c; }
-  .cmd .label { font-family: var(--mono); font-size: 0.72rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--dim); margin-bottom: 10px; }
-  .cmd code { font-family: var(--mono); font-size: 0.85rem; color: var(--text); word-break: break-all; }
-  .cmd code .c { color: var(--dim); }
-  .copy {
-    position: absolute; top: 12px; right: 12px;
-    background: transparent; color: var(--dim);
-    border: 1px solid var(--line); border-radius: 7px;
-    padding: 4px 11px; font-size: 0.72rem; font-family: var(--mono); cursor: pointer;
-    transition: color 200ms, border-color 200ms, transform 150ms;
-  }
+  .cmd { position: relative; background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 14px 76px 14px 16px; margin-bottom: 14px; }
+  .cmd code, pre code { font-family: var(--mono); font-size: 0.88rem; color: var(--text); }
+  .cmd code { word-break: break-word; }
+  .cmd .c, pre .c { color: var(--dim); }
+  .copy { position: absolute; top: 50%; right: 10px; transform: translateY(-50%); background: transparent; color: var(--dim); border: 1px solid var(--line); border-radius: 6px; padding: 4px 10px; font: 0.75rem var(--mono); cursor: pointer; }
   .copy:hover { color: var(--accent); border-color: var(--accent); }
-  .copy:active { transform: scale(0.95); }
+  pre .copy { top: 12px; transform: none; }
+  .links { display: flex; gap: 20px; flex-wrap: wrap; font-size: 0.95rem; margin-top: 18px; }
 
-  /* Demo: full-width framed shot */
-  .shot-frame {
-    border: 1px solid var(--line); border-radius: 16px; overflow: hidden;
-    background: #070b12;
-    box-shadow: 0 40px 100px -32px rgba(0, 0, 0, 0.8);
-  }
-  .shot-frame img { display: block; width: 100%; }
-  .shot-cap {
-    display: flex; justify-content: space-between; gap: 16px; flex-wrap: wrap;
-    padding: 14px 20px; border-top: 1px solid var(--line);
-    font-family: var(--mono); font-size: 0.78rem; color: var(--dim);
-  }
-  .shot-cap b { color: var(--accent); font-weight: 500; }
+  section { padding: 36px 0; }
+  h2 { font-size: 1.5rem; letter-spacing: -0.01em; margin-bottom: 12px; }
+  section p { color: var(--body); max-width: 64ch; margin-bottom: 14px; }
+  section p code, li code { font-family: var(--mono); font-size: 0.85em; color: var(--text); background: var(--panel); border: 1px solid var(--line); padding: 1px 6px; border-radius: 4px; }
 
-  /* Bento features: varied spans, no equal columns */
-  .bento { display: grid; grid-template-columns: repeat(6, 1fr); gap: 14px; }
-  .feat {
-    background: var(--panel); border: 1px solid var(--line);
-    border-radius: 14px; padding: 26px 24px;
-    transition: transform 200ms ease, border-color 200ms ease;
-    position: relative; overflow: hidden;
-  }
-  .feat:hover { transform: translateY(-3px); border-color: #2c3d5c; }
-  .feat.wide { grid-column: span 4; }
-  .feat.narrow { grid-column: span 2; }
-  .feat.half { grid-column: span 3; }
-  .feat .icon {
-    font-family: var(--mono); font-size: 0.75rem; color: var(--accent);
-    letter-spacing: 0.1em; margin-bottom: 12px; display: block;
-  }
-  .feat h3 { font-family: var(--display); font-weight: 600; font-size: 1.12rem; letter-spacing: -0.01em; margin-bottom: 8px; }
-  .feat p { font-size: 0.92rem; color: var(--body); }
-  .feat code { font-family: var(--mono); font-size: 0.82rem; color: var(--accent); background: var(--accent-dim); padding: 1px 7px; border-radius: 6px; }
+  figure { margin-top: 18px; border: 1px solid var(--line); border-radius: 10px; overflow: hidden; background: #070b12; position: relative; }
+  figure video, figure img { display: block; width: 100%; height: auto; }
+  figure video { aspect-ratio: 16 / 9; }
+  figcaption { padding: 10px 16px; border-top: 1px solid var(--line); font-size: 0.82rem; color: var(--dim); }
+  .sound { position: absolute; right: 12px; bottom: 52px; font: 0.78rem var(--mono); background: rgba(7, 11, 18, 0.85); color: var(--text); border: 1px solid var(--line); border-radius: 6px; padding: 6px 12px; cursor: pointer; }
+  .sound:hover { border-color: var(--accent); }
 
-  /* Usage terminal */
-  .usage-term { margin-top: 6px; }
-  .usage-term pre {
-    background: #070b12; border: 1px solid var(--line);
-    border-radius: 14px; padding: 24px clamp(18px, 4vw, 34px);
-    overflow-x: auto; position: relative;
-    font-family: var(--mono); font-size: 0.85rem; line-height: 2;
-    color: var(--body);
-  }
-  .usage-term pre .hl { color: var(--text); }
-  .usage-term pre .cm { color: var(--dim); }
+  ul.plain { list-style: none; display: grid; gap: 12px; margin-top: 8px; }
+  ul.plain li { color: var(--body); max-width: 68ch; padding-left: 18px; position: relative; }
+  ul.plain li::before { content: ""; position: absolute; left: 0; top: 0.7em; width: 6px; height: 6px; background: var(--accent); border-radius: 50%; }
+  ul.plain strong { color: var(--text); font-weight: 600; }
 
-  /* Reveal on scroll */
-  .reveal { opacity: 0; transform: translateY(22px); transition: opacity 500ms ease, transform 500ms cubic-bezier(0.22, 1, 0.36, 1); }
-  .reveal.in { opacity: 1; transform: none; }
-  .reveal.d1 { transition-delay: 80ms; } .reveal.d2 { transition-delay: 160ms; } .reveal.d3 { transition-delay: 240ms; }
-  @media (prefers-reduced-motion: reduce) {
-    .reveal { opacity: 1; transform: none; transition: none; }
-    html { scroll-behavior: auto; }
-  }
+  pre { position: relative; background: #070b12; border: 1px solid var(--line); border-radius: 8px; padding: 18px 20px; overflow-x: auto; line-height: 1.9; margin-top: 8px; }
 
-  footer {
-    margin-top: 90px; padding: 28px 0 60px;
-    border-top: 1px solid var(--line);
-    display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap;
-    color: var(--dim); font-size: 0.85rem;
-  }
-  footer a { color: var(--body); text-decoration: none; transition: color 200ms; }
+  footer { border-top: 1px solid var(--line); margin-top: 32px; }
+  footer .wrap { display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; padding-top: 24px; padding-bottom: 48px; color: var(--dim); font-size: 0.88rem; }
+  footer a { color: var(--body); text-decoration: none; margin-left: 16px; }
+  footer a:first-child { margin-left: 0; }
   footer a:hover { color: var(--accent); }
-  footer .links { display: flex; gap: 20px; }
 
-  @media (max-width: 860px) {
-    .hero { grid-template-columns: 1fr; padding: 56px 0 48px; }
-    .install-grid { grid-template-columns: 1fr; }
-    .feat.wide, .feat.narrow, .feat.half { grid-column: span 6; }
-    .nav-links a:not(.nav-cta) { display: none; }
+  @media (max-width: 600px) {
+    .intro { padding-top: 44px; }
+    header nav a:not(:last-child) { display: none; }
   }
 </style>
 </head>
 <body>
 <a class="skip" href="#main">Skip to content</a>
 
-<nav aria-label="Primary">
-  <div class="nav-inner">
-    <a class="logo" href="#">muse-cli<b>▊</b></a>
-    <div class="nav-links">
-      <a href="#video">Video</a>
+<header>
+  <div class="wrap">
+    <a class="logo" href="#">muse-cli</a>
+    <nav aria-label="Primary">
       <a href="#install">Install</a>
-      <a href="#demo">Demo</a>
-      <a href="#features">Features</a>
-      <a href="#usage">Usage</a>
-      <a class="nav-cta" href="https://github.com/nikships/muse-cli">GitHub ↗</a>
-    </div>
-  </div>
-</nav>
-
-<main id="main">
-  <div class="hero">
-    <div>
-      <p class="eyebrow reveal">Terminal client for muse.ai</p>
-      <h1 class="reveal d1">Your Muse agent, <span class="muted">now in your terminal.</span></h1>
-      <p class="lede reveal d2">Chat, automate, and manage side chats, feed, goals, ideas, and sessions from the shell. No browser needed after a one-time login.</p>
-      <div class="hero-actions reveal d3">
-        <a class="btn primary" href="https://github.com/nikships/muse-cli">View on GitHub</a>
-        <a class="btn ghost" href="https://pypi.org/project/muse-cli/">PyPI</a>
-      </div>
-      <p class="hero-meta reveal d3"><span>On PyPI</span><span>Python 3.10+</span><span>MIT licensed</span></p>
-    </div>
-    <div class="term reveal d2" aria-label="Example terminal session">
-      <div class="term-bar"><span class="dot r"></span><span class="dot y"></span><span class="dot g"></span><span class="term-title">nik — zsh</span></div>
-      <div class="term-body">
-        <div><span class="p">$</span> muse-cli status</div>
-        <div class="o">{ "sessions": 6, "unread": 0, … }</div>
-        <div>&nbsp;</div>
-        <div><span class="p">$</span> muse-cli send "summarize my unread" --wait 120</div>
-        <div class="o">{ "sent": true, "reply": { … } }</div>
-        <div>&nbsp;</div>
-        <div><span class="p">$</span> muse-cli goals <span class="c">| jq -r '.[].title'</span></div>
-        <div class="o">Texting Emily back more…</div>
-        <div class="o">San Diego move</div>
-        <div class="o">Foundry roster redesign</div>
-      </div>
-    </div>
-  </div>
-
-  <section class="block" id="video" aria-label="Video">
-    <div class="section-head reveal">
-      <p class="kicker">In 30 seconds</p>
-      <h2>Your coding agent can now talk to your personal agent.</h2>
-    </div>
-    <figure class="shot-frame video-frame reveal">
-      <video id="promo" src="muse-cli.mp4" poster="muse-cli-poster.jpg" autoplay muted loop playsinline preload="metadata" aria-label="muse-cli in 30 seconds: Claude Code checks goals, updates a plan, and books dinner through your Muse agent"></video>
-      <button class="sound" id="sound" type="button" aria-pressed="false">sound on</button>
-      <figcaption class="shot-cap"><span><b>●</b> claude code → muse-cli → your muse</span><span>voice + music</span></figcaption>
-    </figure>
-  </section>
-
-  <section class="block" id="install" aria-label="Install">
-    <div class="section-head reveal">
-      <p class="kicker">Install</p>
-      <h2>One command, one login, done.</h2>
-    </div>
-    <div class="install-grid">
-      <div class="cmd reveal">
-        <button class="copy" onclick="copy(this)">copy</button>
-        <p class="label">Install from PyPI</p>
-        <code>uv tool install muse-cli <span class="c"># or pipx / pip</span></code>
-      </div>
-      <div class="cmd reveal d1">
-        <button class="copy" onclick="copy(this)">copy</button>
-        <p class="label">Borrow your Chrome login, once</p>
-        <code>muse-cli auth export &amp;&amp; muse-cli status</code>
-      </div>
-    </div>
-  </section>
-
-  <section class="block" id="demo" aria-label="Agent demo">
-    <div class="section-head reveal">
-      <p class="kicker">Agents driving agents</p>
-      <h2>muse-cli ships a skill, so coding agents drive it for you.</h2>
-      <p>Prompt a Droid worker. It activates the muse-cli skill, runs read-only commands, and reports back. Unedited session below.</p>
-    </div>
-    <figure class="shot-frame reveal">
-      <img src="demo-agent.png" alt="Droid agent terminal session: activates the muse-cli skill, runs muse-cli status and muse-cli goals, then summarizes the agent name and goals" />
-      <figcaption class="shot-cap"><span><b>●</b> live session, read-only</span><span>droid → muse-cli skill → muse.ai gateway</span></figcaption>
-    </figure>
-  </section>
-
-  <section class="block" id="features" aria-label="Features">
-    <div class="section-head reveal">
-      <p class="kicker">Under the hood</p>
-      <h2>Small surface, full protocol.</h2>
-    </div>
-    <div class="bento">
-      <div class="feat wide reveal">
-        <span class="icon">01 / transport</span>
-        <h3>Speaks the real gateway protocol</h3>
-        <p>HTTPS auth, then an encrypted Noise-XX WebSocket straight to your personal VM. No browser, no scraping, no middleman. Token handling included: access and gateway tokens refresh on every run.</p>
-      </div>
-      <div class="feat narrow reveal d1">
-        <span class="icon">02 / output</span>
-        <h3>JSON everywhere</h3>
-        <p>Every command except the interactive chat prints JSON. Pipe it into <code>jq</code>, cron, or another agent.</p>
-      </div>
-      <div class="feat narrow reveal">
-        <span class="icon">03 / skill</span>
-        <h3>Agent-ready</h3>
-        <p>Installs a skill file so coding agents can check, message, and automate your Muse agent.</p>
-      </div>
-      <div class="feat wide reveal d1">
-        <span class="icon">04 / coverage</span>
-        <h3>258 methods, one escape hatch</h3>
-        <p>Named commands for chat, threads, feed, goals, ideas, and sessions — plus <code>muse-cli raw</code> for calling any of the 258 gateway methods directly when you need the long tail.</p>
-      </div>
-      <div class="feat half reveal">
-        <span class="icon">05 / upkeep</span>
-        <h3>Self-updating</h3>
-        <p>Notices new PyPI releases once a day in a terminal. Upgrade with <code>muse-cli update</code>, which also refreshes your agent skill. Never upgrades itself.</p>
-      </div>
-      <div class="feat half reveal d1">
-        <span class="icon">06 / protocol notes</span>
-        <h3>Documented reverse engineering</h3>
-        <p>The repo ships full protocol notes and the method table, so anyone can re-derive behavior when the app drifts.</p>
-      </div>
-    </div>
-  </section>
-
-  <section class="block" id="usage" aria-label="Usage">
-    <div class="section-head reveal">
-      <p class="kicker">Usage</p>
-      <h2>The commands you'll actually run.</h2>
-    </div>
-    <div class="usage-term reveal">
-      <pre><button class="copy" onclick="copy(this)">copy</button><code><span class="hl">muse-cli threads</span>                                  <span class="cm"># main chat + side chats</span>
-<span class="hl">muse-cli history --limit 5</span>                        <span class="cm"># recent messages</span>
-<span class="hl">muse-cli send "summarize my unread" --wait 120</span>    <span class="cm"># send + wait for reply</span>
-<span class="hl">muse-cli watch --timeout 60</span>                       <span class="cm"># tail live agent events</span>
-<span class="hl">muse-cli feed --limit 5</span>                           <span class="cm"># your feed</span>
-<span class="hl">muse-cli goals</span>                                    <span class="cm"># list goals</span>
-<span class="hl">muse-cli ideas</span>                                    <span class="cm"># list idea cards</span>
-<span class="hl">muse-cli session-start --title "trip planning"</span>    <span class="cm"># new side chat</span></code></pre>
-    </div>
-  </section>
-
-  <footer>
-    <span>MIT · by <a href="https://github.com/nikships">nikships</a></span>
-    <div class="links">
+      <a href="#commands">Commands</a>
+      <a href="#skill">Agent skill</a>
       <a href="https://github.com/nikships/muse-cli">GitHub</a>
+    </nav>
+  </div>
+</header>
+
+<main id="main" class="wrap">
+  <div class="intro">
+    <h1>Talk to your muse.ai agent from the terminal.</h1>
+    <p class="lede">muse-cli is an unofficial command-line client for your personal muse.ai agent. Send it messages, tail its events, download files it makes, and manage side chats, feed, goals, ideas, and sessions. Every command except the interactive chat prints JSON.</p>
+    <div class="cmd">
+      <button class="copy" type="button" onclick="copy(this)">copy</button>
+      <code>uv tool install muse-cli <span class="c"># or: pipx install muse-cli</span></code>
+    </div>
+    <p class="links">
+      <a href="https://github.com/nikships/muse-cli">Source on GitHub</a>
       <a href="https://pypi.org/project/muse-cli/">PyPI</a>
       <a href="https://github.com/nikships/muse-cli/blob/main/docs/PROTOCOL.md">Protocol notes</a>
+    </p>
+  </div>
+
+  <section aria-labelledby="video-h">
+    <h2 id="video-h">30-second demo</h2>
+    <figure>
+      <video id="promo" src="muse-cli.mp4" poster="muse-cli-poster.jpg" autoplay muted loop playsinline preload="metadata" aria-label="muse-cli in 30 seconds: Claude Code checks goals, updates a plan, and books dinner through your Muse agent"></video>
+      <button class="sound" id="sound" type="button" aria-pressed="false">sound on</button>
+      <figcaption>Claude Code calls muse-cli, which talks to the user's Muse agent.</figcaption>
+    </figure>
+  </section>
+
+  <section id="install" aria-labelledby="install-h">
+    <h2 id="install-h">Install and log in</h2>
+    <p>Install the package, then run a one-time login. <code>auth export</code> copies your existing muse.ai session cookies from Chrome (with remote debugging on) into <code>~/.config/muse-cli/cookies.txt</code>. After that, muse-cli talks to muse.ai directly. Access tokens are fetched fresh on every run.</p>
+    <div class="cmd">
+      <button class="copy" type="button" onclick="copy(this)">copy</button>
+      <code>muse-cli auth export &amp;&amp; muse-cli status</code>
     </div>
-  </footer>
+    <p>Python 3.10 or newer. The README has the full Chrome setup steps.</p>
+  </section>
+
+  <section id="commands" aria-labelledby="commands-h">
+    <h2 id="commands-h">Commands</h2>
+    <p>Run <code>muse-cli</code> with no command for an interactive chat. The rest are one-shot and pipe cleanly into <code>jq</code>, cron, or another agent.</p>
+    <pre><button class="copy" type="button" onclick="copy(this)">copy</button><code>muse-cli status                                 <span class="c"># VM, session count, unread, identity</span>
+muse-cli threads                                <span class="c"># main chat and side chats</span>
+muse-cli history --limit 5                      <span class="c"># recent messages</span>
+muse-cli send "summarize my unread" --wait 120  <span class="c"># send, then wait for the reply</span>
+muse-cli watch --timeout 60                     <span class="c"># tail live agent events</span>
+muse-cli feed --limit 5                         <span class="c"># feed units</span>
+muse-cli goals | jq -r '.[].title'              <span class="c"># goal titles</span>
+muse-cli ideas                                  <span class="c"># idea cards</span>
+muse-cli session-start --title "trip planning"  <span class="c"># new side chat</span></code></pre>
+    <p style="margin-top:14px">For anything without a named command, <code>muse-cli raw</code> calls any of the 258 known gateway methods.</p>
+  </section>
+
+  <section id="skill" aria-labelledby="skill-h">
+    <h2 id="skill-h">Agent skill</h2>
+    <p>The package bundles a skill file. Install it with the <a href="https://github.com/nikships/muse-cli#quick-start">installer script</a>, or run <code>muse-cli update --skill</code>, and coding agents can check on and message your Muse agent. In the session below, a Droid worker activates the skill, runs <code>muse-cli status</code> and <code>muse-cli goals</code> (read-only), and reports back.</p>
+    <figure>
+      <img src="demo-agent.png" alt="Droid agent terminal session: activates the muse-cli skill, runs muse-cli status and muse-cli goals, then summarizes the agent name and goals" loading="lazy" />
+      <figcaption>Droid with the muse-cli skill, read-only commands.</figcaption>
+    </figure>
+  </section>
+
+  <section aria-labelledby="notes-h">
+    <h2 id="notes-h">Good to know</h2>
+    <ul class="plain">
+      <li><strong>Unofficial and reverse engineered.</strong> muse-cli speaks the muse.ai gateway protocol: HTTPS auth, then an encrypted Noise-XX WebSocket to your personal VM. The API is unversioned and can change, so the repo documents the protocol and the method table.</li>
+      <li><strong>Your login stays local.</strong> The cookie file is mode 600 and is never printed or sent anywhere except muse.ai.</li>
+      <li><strong>Updates are opt-in.</strong> In a terminal, muse-cli checks PyPI once a day and prints a notice on stderr. Run <code>muse-cli update</code> to upgrade. Set <code>MUSE_NO_UPDATE_CHECK=1</code> to turn the notice off.</li>
+      <li><strong>Write commands act as you.</strong> <code>send</code>, <code>feed-react</code>, <code>idea-exec</code>, and the session commands run inside your agent, so script them with care.</li>
+    </ul>
+  </section>
 </main>
 
+<footer>
+  <div class="wrap">
+    <span>MIT licensed. By <a href="https://github.com/nikships">nikships</a>.</span>
+    <span>
+      <a href="https://github.com/nikships/muse-cli">GitHub</a>
+      <a href="https://pypi.org/project/muse-cli/">PyPI</a>
+    </span>
+  </div>
+</footer>
+
 <script>
-function copy(btn){
-  const code = btn.parentElement.querySelector('code').innerText;
-  navigator.clipboard.writeText(code).then(()=>{
-    btn.textContent='copied'; setTimeout(()=>btn.textContent='copy',1500);
+function copy(btn) {
+  var code = btn.parentElement.querySelector('code').innerText;
+  navigator.clipboard.writeText(code).then(function () {
+    btn.textContent = 'copied';
+    setTimeout(function () { btn.textContent = 'copy'; }, 1500);
   });
 }
-const promo = document.getElementById('promo');
-const sound = document.getElementById('sound');
-sound.addEventListener('click', () => {
+var promo = document.getElementById('promo');
+var sound = document.getElementById('sound');
+sound.addEventListener('click', function () {
   promo.muted = !promo.muted;
   if (!promo.muted) { promo.currentTime = 0; promo.play(); }
   sound.textContent = promo.muted ? 'sound on' : 'sound off';
   sound.setAttribute('aria-pressed', String(!promo.muted));
 });
 if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) { promo.removeAttribute('autoplay'); promo.pause(); }
-const io = new IntersectionObserver((entries)=>{
-  entries.forEach(e=>{ if(e.isIntersecting){ e.target.classList.add('in'); io.unobserve(e.target); } });
-},{threshold:0.12});
-document.querySelectorAll('.reveal').forEach(el=>io.observe(el));
 </script>
 </body>
 </html>

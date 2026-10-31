@@ -9,7 +9,7 @@ Talk to your personal muse.ai AI agent from the terminal.
 [![Downloads](https://img.shields.io/pepy/dt/muse-cli?style=for-the-badge)](https://pepy.tech/project/muse-cli)
 [![License: MIT](https://img.shields.io/github/license/nikships/muse-cli?style=for-the-badge)](https://github.com/nikships/muse-cli/blob/main/LICENSE)
 [![GitHub stars](https://img.shields.io/github/stars/nikships/muse-cli?style=for-the-badge)](https://github.com/nikships/muse-cli/stargazers)
-[![Website](https://img.shields.io/badge/website-live-3fb950?style=for-the-badge)](https://muse-cli-site.web.app)
+[![Website](https://img.shields.io/badge/website-live-3fb950?style=for-the-badge)](https://muse-cli-web.web.app)
 
 </div>
 

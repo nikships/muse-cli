@@ -40,7 +40,7 @@ Noise-XX WebSocket to the user's personal VM, carrying protobuf envelopes.
   `~/.agents/skills/muse-cli`.
 - `install.sh`: installs the CLI with `uv tool` plus the skill.
 - `site/`, `firebase.json`, `.firebaserc`: static landing page for Firebase
-  Hosting project `muse-cli-site`. No workflow deploys it.
+  Hosting project `muse-cli-web`. No workflow deploys it.
 
 ## Setup and run
 
