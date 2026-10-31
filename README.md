@@ -172,10 +172,12 @@ muse-cli history --limit 3 --download ./out       # save files from these messag
 muse-cli send "make a cat video" --wait 300 --download ./out
 muse-cli watch --thread <session-id>              # tail one side chat
 
+muse-cli unread                                   # unread counts
 muse-cli feed --limit 5
+muse-cli feed-status                              # also: feed-prompt
 muse-cli feed-react <unit-id> love
-muse-cli goals
-muse-cli ideas
+muse-cli goals                                    # one goal: muse-cli goal <id>
+muse-cli ideas                                    # one idea: muse-cli idea <id>
 muse-cli idea-exec <idea-id>                      # agent acts on the idea
 
 muse-cli session-start --title "trip planning"    # new side chat
@@ -231,16 +233,24 @@ uv run python -m unittest discover -s tests   # unit tests (no network)
 muse-cli/
 assets/              README artwork (generated with Muse Image)
 docs/PROTOCOL.md     protocol reference for re-derivation
+scripts/             release version bump (used by CI)
+site/                landing page (Firebase Hosting)
 skills/muse-cli/     agent skill
 src/muse_cli/
   cli.py             argument parsing and all commands
+  chat.py            interactive chat (the default command)
   gateway.py         gateway client (auth, Noise transport, subscriptions)
+  update.py          daily update notice and `muse-cli update`
   routes.json        258 gateway methods extracted from the web client
   desc0.bin          protobuf descriptors for the wire framing
   desc1.bin
+tests/               unit tests (no network)
 install.sh           CLI + skill installer
 pyproject.toml
 ```
+
+See [AGENTS.md](https://github.com/nikships/muse-cli/blob/main/AGENTS.md) for
+release flow and contributor notes. Merging to `main` publishes a release.
 
 ## Setup notes
 
