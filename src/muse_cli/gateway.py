@@ -194,6 +194,7 @@ class Gateway:
         self.stream = 1
         self._send_lock = threading.Lock()
         self._recv_lock = threading.Lock()
+        self._chunks = {}   # chunk_id -> {chunk_index: payload}, guarded by _recv_lock
 
     # -- low-level framing -------------------------------------------------
     def _send_envelope(self, service_id, frame_bytes):
@@ -210,12 +211,26 @@ class Gateway:
         # Callers must still avoid *logical* races: only one thread should
         # be consuming frames at a time, or responses get misrouted.
         with self._recv_lock:
-            data, _flags = self.ws.recv()
-            pt = bytes(self.noise.decrypt(bytes(data)))
-        ntf = NoiseTransportFrame()
-        ntf.ParseFromString(pt)
+            # A reply bigger than one Noise message (65535 bytes) arrives as
+            # several transport frames sharing a chunk_id; only the joined
+            # payload is a ServiceResponse. Keep reading until it is whole.
+            while True:
+                data, _flags = self.ws.recv()
+                pt = bytes(self.noise.decrypt(bytes(data)))
+                ntf = NoiseTransportFrame()
+                ntf.ParseFromString(pt)
+                payload = bytes(ntf.payload)
+                total = ntf.total_chunks or 1
+                if total == 1:
+                    break
+                parts = self._chunks.setdefault(ntf.chunk_id, {})
+                parts[ntf.chunk_index] = payload
+                if all(i in parts for i in range(total)):
+                    del self._chunks[ntf.chunk_id]
+                    payload = b"".join(parts[i] for i in range(total))
+                    break
         sr = ServiceResponse()
-        sr.ParseFromString(ntf.payload)
+        sr.ParseFromString(payload)
         sf = ServiceFrame()
         sf.ParseFromString(sr.payload)
         return sf
