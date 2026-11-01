@@ -84,6 +84,10 @@ saved 9 muse.ai cookies to /Users/you/.config/muse-cli/cookies.txt (from chrome 
 
 It reads every profile of every supported browser and uses the one that is
 logged in to muse.ai. Pick one with `--browser chrome|brave|arc|edge|chromium`.
+Unreadable profiles are skipped if another profile has a usable login.
+Expired cookies are ignored, and an empty or expired `hatch_sess` never
+replaces your saved login. If the cookie database keeps changing during the
+read, close the browser and retry.
 If nothing is logged in, the command says so and leaves the cookies file on
 disk as it was. `muse-cli status` then prints JSON with your VM id, how many
 chats you have, the unread count, and your identity. That means install and
@@ -179,6 +183,7 @@ muse-cli status
 
 ```bash
 muse-cli                                          # interactive chat (same as `muse-cli chat`)
+muse-cli auth export --browser auto               # import the browser login (macOS: direct read)
 muse-cli threads                                  # main chat + side chats
 muse-cli history --limit 5                        # recent messages
 muse-cli history --thread <session-id> --limit 5  # one side chat

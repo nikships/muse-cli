@@ -105,11 +105,17 @@ chat / feed / goals / ideas / sessions / ...
   keychain read shows a macOS Allow dialog. The desktop Muse.app is not a
   source: its OAuth tokens live in the keychain access group
   `V9WTTPBFK9.com.meta.endo`, readable only by the app itself.
+  Copy the DB and its WAL/rollback journal together, checking their file
+  metadata before and after the copy; retry a changing store at most three
+  times. A checkpoint during copying can otherwise silently omit cookies.
+  Expired rows are ignored before keychain access, and unreadable or
+  undecryptable profiles do not block another usable profile. Cache both
+  keys and keychain failures per browser to avoid repeated prompts.
 - Elsewhere (and with `--browser agent-browser`) `auth export` reads cookies
   from the user's own Google Chrome through agent-browser `--auto-connect`.
   Chrome 144+ shares that profile only after remote debugging is enabled at
   `chrome://inspect/#remote-debugging`. That export follows the active tab, so
   a muse.ai tab has to be focused first.
 - Either way, `auth export` must never overwrite a working jar without a
-  `hatch_sess` in the new one, and a freshly launched browser has no login; do
-  not fall back to one.
+  non-empty, unexpired `hatch_sess` in the new one, and a freshly launched
+  browser has no login; do not fall back to one.

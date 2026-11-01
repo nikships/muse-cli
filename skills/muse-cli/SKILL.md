@@ -63,6 +63,10 @@ cookie values are never printed; do not print the cookies file either.
   dialog or it timed out. Rerun and have them click Allow.
 - To target one browser: `muse-cli auth export --browser brave` (also
   `chrome`, `arc`, `edge`, `chromium`). Safari is not supported; use 2d.
+- Expired cookies are ignored. Empty or expired `hatch_sess` cookies never
+  replace a saved login. Unreadable profiles are skipped if another works.
+- `cookie database changed while reading ...`: close that browser and rerun
+  once. The command retries a changing database at most three times.
 - On Linux or Windows, or if the Mac route is not possible, use 2b.
 
 ### 2b. Other systems: cookie reader (agent-browser)
@@ -123,8 +127,8 @@ in a loop:
   opens another profile, and it does not have their muse.ai login.
 - "no muse.ai tab": Chrome connected. They still need https://muse.ai/ open
   and in front in that same window.
-- "no hatch_sess" / "do not include hatch_sess": the tab is open and they
-  are logged out. The cookies file on disk was kept.
+- "no hatch_sess" / "do not include a valid hatch_sess": the tab is open but
+  the login is missing, empty or expired. The cookies file on disk was kept.
 - "daemon already running": `agent-browser close`, then `muse-cli auth export --browser agent-browser` once.
 - `agent-browser` not found: back to 2b.
 

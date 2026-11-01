@@ -53,9 +53,8 @@ def connect(cfg):
     if not os.path.exists(cfg["cookies_file"]):
         raise AuthError(
             f"no cookies at {cfg['cookies_file']}. Run `muse-cli auth export` "
-            "and follow the steps it prints: turn on Chrome remote debugging at "
-            "chrome://inspect/#remote-debugging, open https://muse.ai/ in that "
-            "window, then export again.")
+            "after logging in at https://muse.ai/ in your browser, "
+            "and follow the setup steps it prints.")
     cookies = load_cookies(cfg["cookies_file"])
     if not cookies.strip():
         raise AuthError(f"cookies file {cfg['cookies_file']} is empty; run `muse-cli auth export`")
@@ -299,8 +298,12 @@ def cmd_auth_export(args):
             _print_export_failure(err)
             sys.exit(1)
     # Never clobber a working login with an empty or logged-out jar.
-    if not any(c["name"] == "hatch_sess" for c in jar):
-        print(f"{source} answered, but the cookies do not include hatch_sess.", file=sys.stderr)
+    now = time.time()
+    if not any(c["name"] == "hatch_sess" and c.get("value")
+               and (float(c.get("expires") or 0) <= 0 or float(c["expires"]) > now)
+               for c in jar):
+        print(f"{source} answered, but the cookies do not include a valid hatch_sess "
+              "(non-empty and unexpired).", file=sys.stderr)
         print("That cookie is set only after you log in at https://muse.ai/.", file=sys.stderr)
         print("Log in, leave the muse.ai tab open, and run `muse-cli auth export` again.",
               file=sys.stderr)
@@ -892,6 +895,8 @@ def main():
         "macOS asks once to let `security` use the browser's Safe Storage key;\n"
         "click Allow. No Node.js or debugging port is needed, and the browser\n"
         "can be closed.\n"
+        "Unreadable profiles are skipped if another has a usable login.\n"
+        "Empty or expired login cookies never replace a saved login.\n"
         "\n"
         "Elsewhere, or with --browser agent-browser, it reads Google Chrome through\n"
         "agent-browser. Chrome shares those cookies only after remote debugging is on.\n"

@@ -19,7 +19,8 @@ Noise-XX WebSocket to the user's personal VM, carrying protobuf envelopes.
 ## Repository map
 
 - `src/muse_cli/cli.py`: argparse setup (`main()`), every `cmd_*` command,
-  config loading, and `auth export` (drives Chrome through `agent-browser`).
+  config loading, and `auth export` (direct browser read on macOS,
+  `agent-browser` elsewhere).
 - `src/muse_cli/browsers.py`: macOS-only direct read of the muse.ai login from
   Chromium browsers' cookie databases (`auth export`), no network.
 - `src/muse_cli/gateway.py`: `Gateway` client (tokens, Noise transport,
@@ -145,8 +146,9 @@ change:
 ## Troubleshooting
 
 - `auth error: no cookies at ...`: run `muse-cli auth export` and follow the
-  steps it prints (Chrome remote debugging on, a logged-in muse.ai tab in
-  front). The README also covers copying cookies by hand.
+  steps it prints (on macOS, log in in a supported browser; elsewhere, enable
+  Chrome remote debugging with a logged-in muse.ai tab in front). The README
+  also covers copying cookies by hand.
 - `/api/session` returns `status: unavailable` while the VM restarts. Retry, or
   run `MUSE_VM_ID=<id> muse-cli wake`.
 - Many calls failing at once usually means the protocol drifted. Re-derive from

@@ -1,7 +1,9 @@
 import ctypes
 import hashlib
 import os
+import shutil
 import sqlite3
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -45,6 +47,9 @@ class ReadCookiesTest(unittest.TestCase):
         p = patch.object(browsers, "supported", return_value=True)
         p.start()
         self.addCleanup(p.stop)
+        p = patch("time.time", return_value=1700000000)
+        p.start()
+        self.addCleanup(p.stop)
         self.asked = []
 
     def key_for(self, service, account):
@@ -84,7 +89,7 @@ class ReadCookiesTest(unittest.TestCase):
 
     def test_picks_the_logged_in_profile_and_asks_keychain_once(self):
         self.chrome("Profile 1", [row(".muse.ai", "theme", "x")])
-        self.chrome("Profile 2", [row(".muse.ai", "hatch_sess", "P2", expires=13300000000000000)])
+        self.chrome("Profile 2", [row(".muse.ai", "hatch_sess", "P2", expires=13360000000000000)])
         self.chrome("Profile 3", [row(".muse.ai", "hatch_sess", "P3", expires=13400000000000000)])
         jar, source = self.read()
         self.assertEqual(source, "chrome (Profile 3)")
@@ -96,6 +101,142 @@ class ReadCookiesTest(unittest.TestCase):
         with self.assertRaisesRegex(browsers.BrowserCookieError, "no muse.ai login"):
             self.read()
         self.assertEqual(self.asked, [])
+
+    def test_expired_login_never_touches_the_keychain(self):
+        self.chrome("Default", [row(".muse.ai", "hatch_sess", "OLD",
+                                    expires=13300000000000000)])
+        with self.assertRaisesRegex(browsers.BrowserCookieError, "no muse.ai login"):
+            self.read()
+        self.assertEqual(self.asked, [])
+
+    def test_expired_cookies_are_not_exported_or_decrypted(self):
+        self.chrome("Default", [
+            row(".muse.ai", "hatch_sess", "LIVE", expires=0),
+            (".muse.ai", "old", "/", 1, 13300000000000000, "", b"v99bad"),
+        ])
+        jar, _ = self.read()
+        self.assertEqual([c["name"] for c in jar], ["hatch_sess"])
+
+    def test_empty_session_does_not_hide_a_usable_profile(self):
+        self.chrome("Default", [row(".muse.ai", "hatch_sess", "")])
+        self.chrome("Profile 1", [row(".muse.ai", "hatch_sess", "LIVE", expires=0)])
+        jar, source = self.read()
+        self.assertEqual(source, "chrome (Profile 1)")
+        self.assertEqual(jar[0]["value"], "LIVE")
+        self.assertEqual(self.asked, ["Chrome Safe Storage"])
+
+    def test_empty_session_is_not_a_login(self):
+        self.chrome("Default", [row(".muse.ai", "hatch_sess", "")])
+        with self.assertRaisesRegex(browsers.BrowserCookieError, "no muse.ai login"):
+            self.read()
+
+    def test_broken_database_does_not_hide_a_usable_profile(self):
+        self.chrome("Default", [row(".muse.ai", "hatch_sess", "BROKEN")])
+        path = os.path.join(self.tmp.name, "Google/Chrome/Default/Network/Cookies")
+        with open(path, "wb") as fh:
+            fh.write(b"not sqlite")
+        self.chrome("Profile 1", [row(".muse.ai", "hatch_sess", "LIVE")])
+        jar, source = self.read()
+        self.assertEqual(source, "chrome (Profile 1)")
+        self.assertEqual(jar[0]["value"], "LIVE")
+
+    def test_bad_ciphertext_does_not_hide_a_usable_profile(self):
+        self.chrome("Default", [(".muse.ai", "hatch_sess", "/", 1,
+                                 13500000000000000, "", b"v99bad")])
+        self.chrome("Profile 1", [row(".muse.ai", "hatch_sess", "LIVE")])
+        jar, source = self.read()
+        self.assertEqual(source, "chrome (Profile 1)")
+        self.assertEqual(jar[0]["value"], "LIVE")
+        self.assertEqual(self.asked, ["Chrome Safe Storage"])
+
+    def test_keychain_denial_is_not_repeated_for_each_profile(self):
+        self.chrome("Default", [row(".muse.ai", "hatch_sess", "A")])
+        self.chrome("Profile 1", [row(".muse.ai", "hatch_sess", "B")])
+        with patch.object(browsers, "_safe_storage_key",
+                          side_effect=browsers.BrowserCookieError("denied")) as key:
+            with self.assertRaisesRegex(browsers.BrowserCookieError, "denied"):
+                browsers.read_cookies(key_for=key, decrypt=fake_decrypt)
+        key.assert_called_once()
+
+    def test_copy_permission_error_is_a_browser_error(self):
+        self.chrome("Default", [row(".muse.ai", "hatch_sess", "X")])
+        with patch.object(browsers.shutil, "copy", side_effect=PermissionError("denied")):
+            with self.assertRaisesRegex(browsers.BrowserCookieError, "denied"):
+                self.read()
+        self.assertEqual(self.asked, [])
+
+    def test_unreadable_profile_does_not_hide_another_browser(self):
+        self.chrome("Default", [row(".muse.ai", "hatch_sess", "CHROME")])
+        make_db(os.path.join(self.tmp.name, "BraveSoftware/Brave-Browser/Default/Cookies"),
+                [row(".muse.ai", "hatch_sess", "BRAVE")])
+        copy = shutil.copy
+
+        def deny_chrome(src, dst):
+            if "Google/Chrome" in src:
+                raise PermissionError("denied")
+            return copy(src, dst)
+
+        with patch.object(browsers.shutil, "copy", side_effect=deny_chrome):
+            jar, source = self.read()
+        self.assertEqual(source, "brave (Default)")
+        self.assertEqual(jar[0]["value"], "BRAVE")
+        self.assertEqual(self.asked, ["Brave Safe Storage"])
+
+    def test_keeps_changing_database_has_bounded_retries_and_cleans_up(self):
+        self.chrome("Default", [row(".muse.ai", "hatch_sess", "X")])
+        stamp = browsers._file_stamp
+        copies = []
+        copy = shutil.copy
+
+        def changing_stamp(path):
+            original = stamp(path)
+            return (*original, len(copies)) if original else None
+
+        def record_copy(src, dst):
+            copies.append(dst)
+            return copy(src, dst)
+
+        with patch.object(browsers, "_file_stamp", side_effect=changing_stamp), \
+                patch.object(browsers.shutil, "copy", side_effect=record_copy):
+            with self.assertRaisesRegex(browsers.BrowserCookieError, "close the browser"):
+                self.read()
+        self.assertEqual(len(copies), 3)
+        self.assertTrue(all(not os.path.exists(os.path.dirname(p)) for p in copies))
+        self.assertEqual(self.asked, [])
+
+    def test_retries_a_database_changed_during_copy(self):
+        self.chrome("Default", [row(".muse.ai", "hatch_sess", "OLD")])
+        path = os.path.join(self.tmp.name, "Google/Chrome/Default/Network/Cookies")
+        db = sqlite3.connect(path)
+        self.addCleanup(db.close)
+        db.execute("PRAGMA journal_mode=WAL")
+        copy = shutil.copy
+        changed = []
+
+        def copy_then_checkpoint(src, dst):
+            result = copy(src, dst)
+            if src == path and not changed:
+                changed.append(True)
+                db.execute("UPDATE cookies SET encrypted_value=?", (blob(".muse.ai", "NEW"),))
+                db.commit()
+                db.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+            return result
+
+        with patch.object(browsers.shutil, "copy", side_effect=copy_then_checkpoint):
+            jar, _ = self.read()
+        self.assertEqual(jar[0]["value"], "NEW")
+
+    def test_reads_committed_wal_rows_but_not_uncommitted_changes(self):
+        self.chrome("Default", [row(".muse.ai", "hatch_sess", "OLD")])
+        path = os.path.join(self.tmp.name, "Google/Chrome/Default/Network/Cookies")
+        db = sqlite3.connect(path)
+        self.addCleanup(db.close)
+        db.execute("PRAGMA journal_mode=WAL")
+        db.execute("UPDATE cookies SET encrypted_value=?", (blob(".muse.ai", "LIVE"),))
+        db.commit()
+        db.execute("UPDATE cookies SET encrypted_value=?", (blob(".muse.ai", "UNCOMMITTED"),))
+        jar, _ = self.read()
+        self.assertEqual(jar[0]["value"], "LIVE")
 
     def test_missing_browser_and_unknown_profiles(self):
         with self.assertRaisesRegex(browsers.BrowserCookieError, "no Chromium-based browser"):
@@ -126,6 +267,26 @@ class ReadCookiesTest(unittest.TestCase):
         with patch.object(browsers, "supported", return_value=False):
             with self.assertRaisesRegex(browsers.BrowserCookieError, "macOS-only"):
                 self.read()
+
+
+class KeychainTest(unittest.TestCase):
+    def test_denied_keychain_is_a_browser_error(self):
+        result = subprocess.CompletedProcess([], 1, "", "access denied")
+        with patch.object(browsers.subprocess, "run", return_value=result):
+            with self.assertRaisesRegex(browsers.BrowserCookieError, "access denied"):
+                browsers._safe_storage_key("Chrome Safe Storage", "Chrome")
+
+    def test_keychain_timeout_does_not_print_captured_password(self):
+        error = subprocess.TimeoutExpired("security", 120, output="private-password")
+        with patch.object(browsers.subprocess, "run", side_effect=error):
+            with self.assertRaisesRegex(browsers.BrowserCookieError, "timed out") as cm:
+                browsers._safe_storage_key("Chrome Safe Storage", "Chrome")
+        self.assertNotIn("private-password", str(cm.exception))
+
+    def test_keychain_launch_error_is_a_browser_error(self):
+        with patch.object(browsers.subprocess, "run", side_effect=OSError("cannot launch")):
+            with self.assertRaisesRegex(browsers.BrowserCookieError, "cannot launch"):
+                browsers._safe_storage_key("Chrome Safe Storage", "Chrome")
 
 
 @unittest.skipUnless(sys.platform == "darwin", "CommonCrypto is macOS-only")

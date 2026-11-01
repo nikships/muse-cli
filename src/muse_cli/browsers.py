@@ -13,6 +13,7 @@ import sqlite3
 import subprocess
 import sys
 import tempfile
+import time
 
 SUPPORT = os.path.expanduser("~/Library/Application Support")
 
@@ -56,25 +57,42 @@ def cookie_stores(names=None):
     return found
 
 
+def _file_stamp(path):
+    try:
+        s = os.stat(path)
+    except FileNotFoundError:
+        return None
+    return s.st_ino, s.st_size, s.st_mtime_ns, s.st_ctime_ns
+
+
 def _muse_rows(path):
     """Encrypted muse.ai rows from a copy of the database (the browser locks the original)."""
-    tmp = tempfile.mkdtemp(prefix="muse-cli-")   # mode 0700
+    paths = [path, path + "-wal", path + "-journal"]
     try:
-        copy = os.path.join(tmp, "Cookies")
-        shutil.copy(path, copy)
-        if os.path.exists(path + "-wal"):
-            shutil.copy(path + "-wal", copy + "-wal")
-        db = sqlite3.connect(copy)
-        try:
-            return db.execute(
-                "SELECT host_key, name, path, is_secure, expires_utc, value, encrypted_value "
-                "FROM cookies WHERE host_key = 'muse.ai' OR host_key LIKE '%.muse.ai'").fetchall()
-        finally:
-            db.close()
-    except sqlite3.Error as e:
+        for _ in range(3):
+            before = [_file_stamp(p) for p in paths]
+            with tempfile.TemporaryDirectory(prefix="muse-cli-") as tmp:  # mode 0700
+                copy = os.path.join(tmp, "Cookies")
+                try:
+                    shutil.copy(path, copy)
+                    for src, stamp in zip(paths[1:], before[1:]):
+                        if stamp is not None:
+                            shutil.copy(src, copy + src[len(path):])
+                except FileNotFoundError:
+                    continue
+                # A checkpoint between copying the DB and WAL can silently lose cookies.
+                if before != [_file_stamp(p) for p in paths]:
+                    continue
+                db = sqlite3.connect(copy)
+                try:
+                    return db.execute(
+                        "SELECT host_key, name, path, is_secure, expires_utc, value, encrypted_value "
+                        "FROM cookies WHERE host_key = 'muse.ai' OR host_key LIKE '%.muse.ai'").fetchall()
+                finally:
+                    db.close()
+    except (OSError, sqlite3.Error) as e:
         raise BrowserCookieError(f"cannot read {path}: {e}")
-    finally:
-        shutil.rmtree(tmp, ignore_errors=True)
+    raise BrowserCookieError(f"cookie database changed while reading {path}; close the browser and retry")
 
 
 def _safe_storage_key(service, account):
@@ -83,6 +101,8 @@ def _safe_storage_key(service, account):
                            capture_output=True, text=True, timeout=KEYCHAIN_WAIT)
     except subprocess.TimeoutExpired:
         raise BrowserCookieError("timed out waiting for the macOS keychain prompt")
+    except OSError as e:
+        raise BrowserCookieError(f"could not read '{service}' from the keychain ({e})")
     if r.returncode != 0:
         why = (r.stderr or "").strip().splitlines()[-1:] or [f"exit {r.returncode}"]
         raise BrowserCookieError(f"could not read '{service}' from the keychain ({why[0]})")
@@ -127,8 +147,8 @@ def read_cookies(browser="auto", key_for=_safe_storage_key, decrypt=_aes_cbc_dec
     """Return (jar, source) with the muse.ai cookies of the profile that is logged in.
 
     jar entries match what `auth export` writes: name, value, domain, path,
-    secure, expires. The keychain is asked only once a profile with a
-    `hatch_sess` row is found, so a browser without a muse.ai login never
+    secure, expires. The keychain is asked only once a profile with an
+    unexpired `hatch_sess` row is found, so a browser without a muse.ai login never
     triggers a prompt. Raises BrowserCookieError with a reason otherwise.
     """
     if not supported():
@@ -138,21 +158,39 @@ def read_cookies(browser="auto", key_for=_safe_storage_key, decrypt=_aes_cbc_dec
     if not stores:
         raise BrowserCookieError("no Chromium-based browser profile found"
                                  if names is None else f"no {browser} profile found")
-    logged_in = []
+    logged_in, errors = [], []
+    now = time.time()
     for name, profile, path in stores:
-        rows = _muse_rows(path)
+        try:
+            rows = [r for r in _muse_rows(path) if not r[4] or _expires(r[4]) > now]
+        except BrowserCookieError as e:
+            errors.append(str(e))
+            continue
         sess = [r for r in rows if r[1] == "hatch_sess"]
         if sess:
             logged_in.append((max(r[4] for r in sess), name, profile, rows))
-    if not logged_in:
-        raise BrowserCookieError("no muse.ai login (hatch_sess) in " +
-                                 ", ".join(sorted({f"{n} {p}" for n, p, _ in stores})))
-    _, name, profile, rows = max(logged_in, key=lambda t: t[0])
-    _, service, account = BROWSERS[name]
-    key = key_for(service, account)
-    jar = []
-    for host, cname, cpath, secure, expires, value, blob in rows:
-        jar.append({"name": cname, "domain": host, "path": cpath or "/",
-                    "secure": bool(secure), "expires": _expires(expires),
-                    "value": _decrypt(blob, key, host, decrypt) if blob else value})
-    return jar, f"{name} ({profile})"
+    keys = {}
+    for _, name, profile, rows in sorted(logged_in, key=lambda t: t[0], reverse=True):
+        try:
+            if name not in keys:
+                _, service, account = BROWSERS[name]
+                try:
+                    keys[name] = key_for(service, account)
+                except BrowserCookieError as e:
+                    keys[name] = e
+            key = keys[name]
+            if isinstance(key, BrowserCookieError):
+                raise key
+            jar = []
+            for host, cname, cpath, secure, expires, value, blob in rows:
+                jar.append({"name": cname, "domain": host, "path": cpath or "/",
+                            "secure": bool(secure), "expires": _expires(expires),
+                            "value": _decrypt(blob, key, host, decrypt) if blob else value})
+            if any(c["name"] == "hatch_sess" and c["value"] for c in jar):
+                return jar, f"{name} ({profile})"
+        except (BrowserCookieError, OSError) as e:
+            errors.append(f"{name} ({profile}): {e}")
+    if errors:
+        raise BrowserCookieError("; ".join(errors))
+    raise BrowserCookieError("no muse.ai login (hatch_sess) in " +
+                             ", ".join(sorted({f"{n} {p}" for n, p, _ in stores})))
