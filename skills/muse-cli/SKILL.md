@@ -34,16 +34,43 @@ muse-cli --help >/dev/null && echo cli-ok   # proves the install + deps resolve
 ## 2. Auth
 
 The CLI stores the user's muse.ai browser login at
-`~/.config/muse-cli/cookies.txt` (mode 0600). Chrome hides those cookies
-until remote debugging is on. Walk the user through the steps below and wait
-for them. Do not run `muse-cli auth export` before they say the Chrome
-switch is on and a logged-in muse.ai tab is open.
+`~/.config/muse-cli/cookies.txt` (mode 0600). Access and gateway tokens are
+fetched fresh on every run; only cookies persist. When a later command fails
+with `auth error`, the cookies expired: repeat this step.
 
-Access and gateway tokens are fetched fresh on every run; only cookies
-persist. When a later command fails with `auth error`, the cookies expired:
-repeat 2b (or 2c).
+### 2a. macOS: read the browser directly (try this first)
 
-### 2a. Cookie reader
+Needs no Node.js and no debugging port. The user must be logged in at
+https://muse.ai/ in Chrome, Brave, Arc, Edge or Chromium (any profile; the
+browser can be closed). Ask them to confirm, then:
+
+```bash
+muse-cli auth export
+test -s ~/.config/muse-cli/cookies.txt && echo auth-ok
+muse-cli status
+```
+
+The first run makes macOS show a dialog asking whether `security` may use the
+browser's "Safe Storage" key. Tell the user to click **Allow** (or **Always
+Allow**) and wait for them; do not retry in a loop while the dialog is open.
+Success is `saved N muse.ai cookies to ... (from chrome (Default))`. The
+cookie values are never printed; do not print the cookies file either.
+
+- `no muse.ai login (hatch_sess) in ...`: they are not logged in in any
+  supported browser. Ask them to log in at https://muse.ai/ and rerun. The
+  cookies file on disk was kept.
+- `could not read '... Safe Storage' from the keychain`: they denied the
+  dialog or it timed out. Rerun and have them click Allow.
+- To target one browser: `muse-cli auth export --browser brave` (also
+  `chrome`, `arc`, `edge`, `chromium`). Safari is not supported; use 2d.
+- Expired cookies are ignored. Empty or expired `hatch_sess` cookies never
+  replace a saved login. Unreadable profiles are skipped if another works.
+- Only cookies valid for `muse.ai` are exported, not subdomain-only cookies.
+- `cookie database changed while reading ...`: close that browser and rerun
+  once. The command retries a changing database at most three times.
+- On Linux or Windows, or if the Mac route is not possible, use 2b.
+
+### 2b. Other systems: cookie reader (agent-browser)
 
 ```bash
 command -v node >/dev/null && node --version
@@ -66,13 +93,14 @@ or by installing with the same rights they use for other global npm tools.
 Do not sudo unless they tell you to.
 
 If `node` or `npm` is missing, stop. Tell them to install Node.js LTS from
-https://nodejs.org, open a new terminal, and come back. Offer 2c if they
+https://nodejs.org, open a new terminal, and come back. Offer 2d if they
 would rather not install Node.
 
-### 2b. Chrome, then export
+### 2c. Other systems: Chrome, then export
 
-Tell the user to do all of this in the Google Chrome window they already
-use for muse.ai. Needs Chrome 144 or newer. Wait until they confirm:
+Chrome hides its cookies until remote debugging is on. Walk the user through
+this in the Google Chrome window they already use for muse.ai. Needs Chrome
+144 or newer. Wait until they confirm, and do not run `auth export` before:
 
 1. Address bar: `chrome://inspect/#remote-debugging`
 2. Turn on remote debugging ("Allow remote debugging for this browser instance").
@@ -82,7 +110,7 @@ use for muse.ai. Needs Chrome 144 or newer. Wait until they confirm:
 Then:
 
 ```bash
-muse-cli auth export
+muse-cli auth export --browser agent-browser
 test -s ~/.config/muse-cli/cookies.txt && echo auth-ok
 ```
 
@@ -100,14 +128,14 @@ in a loop:
   opens another profile, and it does not have their muse.ai login.
 - "no muse.ai tab": Chrome connected. They still need https://muse.ai/ open
   and in front in that same window.
-- "no hatch_sess" / "do not include hatch_sess": the tab is open and they
-  are logged out. The cookies file on disk was kept.
-- "daemon already running": `agent-browser close`, then `muse-cli auth export` once.
-- `agent-browser` not found: back to 2a.
+- "no hatch_sess" / "do not include a valid hatch_sess": the tab is open but
+  the login is missing, empty or expired. The cookies file on disk was kept.
+- "daemon already running": `agent-browser close`, then `muse-cli auth export --browser agent-browser` once.
+- `agent-browser` not found: back to 2b.
 
-### 2c. Copy cookies by hand
+### 2d. Copy cookies by hand
 
-Use this when Node is unavailable, or the user does not want remote debugging on.
+Use this when Node is unavailable, the browser is Safari, or the user does not want remote debugging on.
 
 1. They are logged in at https://muse.ai/ in Chrome.
 2. DevTools (F12) → Application → Cookies → `https://muse.ai`.

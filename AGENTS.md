@@ -19,7 +19,10 @@ Noise-XX WebSocket to the user's personal VM, carrying protobuf envelopes.
 ## Repository map
 
 - `src/muse_cli/cli.py`: argparse setup (`main()`), every `cmd_*` command,
-  config loading, and `auth export` (drives Chrome through `agent-browser`).
+  config loading, and `auth export` (direct browser read on macOS,
+  `agent-browser` elsewhere).
+- `src/muse_cli/browsers.py`: macOS-only direct read of the muse.ai login from
+  Chromium browsers' cookie databases (`auth export`), no network.
 - `src/muse_cli/gateway.py`: `Gateway` client (tokens, Noise transport,
   request/subscribe/download), `AuthError`, `GatewayError`, `load_cookies`.
 - `src/muse_cli/chat.py`: the interactive REPL (`muse-cli` with no command).
@@ -129,8 +132,11 @@ change:
   `~/.config/muse-cli/cookies.txt` with mode 600. Never print, log, or commit
   them. Access and gateway tokens are fetched fresh on every run.
 - `auth export` must never overwrite a working cookie file with one that lacks
-  `hatch_sess`. It reads the user's own Chrome through `agent-browser
-  --auto-connect`; never fall back to a fresh browser, which has no login.
+  `hatch_sess`. On macOS it decrypts the muse.ai rows of the user's own
+  browser cookie database (`browsers.py`); elsewhere it reads the user's own
+  Chrome through `agent-browser --auto-connect`. Never fall back to a fresh
+  browser, which has no login. Read only muse.ai rows, never log or print
+  cookie values, and never keep a copy of a browser's cookie database around.
 - `.gitignore` covers `cookies.txt`, `agent-cookies.json`, `config.json`, and
   `*.har`. HAR captures hold live credentials, so never commit one.
 - Commands that write (`send`, `feed-react`, `idea-exec`, session ops, `raw`
@@ -140,8 +146,9 @@ change:
 ## Troubleshooting
 
 - `auth error: no cookies at ...`: run `muse-cli auth export` and follow the
-  steps it prints (Chrome remote debugging on, a logged-in muse.ai tab in
-  front). The README also covers copying cookies by hand.
+  steps it prints (on macOS, log in in a supported browser; elsewhere, enable
+  Chrome remote debugging with a logged-in muse.ai tab in front). The README
+  also covers copying cookies by hand.
 - `/api/session` returns `status: unavailable` while the VM restarts. Retry, or
   run `MUSE_VM_ID=<id> muse-cli wake`.
 - Many calls failing at once usually means the protocol drifted. Re-derive from

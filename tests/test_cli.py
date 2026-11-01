@@ -7,7 +7,7 @@ import tempfile
 import unittest
 from unittest.mock import MagicMock, patch
 
-from muse_cli import cli
+from muse_cli import browsers, cli
 
 
 def read(path):
@@ -40,6 +40,7 @@ class AuthExportTest(unittest.TestCase):
             try:
                 with patch.object(cli, "CONFIG_DIR", tmp), \
                         patch.object(cli, "COOKIES_FILE", cookies), \
+                        patch.object(cli.browsers, "supported", return_value=False), \
                         patch.object(cli.shutil, "which", return_value="/bin/agent-browser"), \
                         patch.object(cli, "_browser_cookies", return_value=(jar, None)):
                     cli.cmd_auth_export(None)
@@ -57,6 +58,7 @@ class AuthExportTest(unittest.TestCase):
                 fh.write("hatch_sess=keep")
             with patch.object(cli, "CONFIG_DIR", tmp), \
                     patch.object(cli, "COOKIES_FILE", cookies), \
+                    patch.object(cli.browsers, "supported", return_value=False), \
                     patch.object(cli.shutil, "which", return_value="/bin/agent-browser"), \
                     patch.object(cli, "_browser_cookies", return_value=(jar, None)):
                 with self.assertRaises(SystemExit) as ctx:
@@ -64,6 +66,98 @@ class AuthExportTest(unittest.TestCase):
             self.assertEqual(ctx.exception.code, 1)
             self.assertEqual(read(cookies), "hatch_sess=keep")
             self.assertFalse(os.path.exists(cookies + ".bak"))
+
+    def export(self, tmp, browser, direct, which="/bin/agent-browser", agent=None):
+        cookies = os.path.join(tmp, "cookies.txt")
+        args = MagicMock(browser=browser)
+        ctx = [patch.object(cli, "CONFIG_DIR", tmp), patch.object(cli, "COOKIES_FILE", cookies),
+               patch.object(cli.browsers, "supported", return_value=True),
+               patch.object(cli.browsers, "read_cookies", side_effect=direct),
+               patch.object(cli.shutil, "which", return_value=which),
+               patch.object(cli, "_browser_cookies", return_value=agent or (None, "no agent"))]
+        for c in ctx:
+            c.start()
+        self.addCleanup(patch.stopall)
+        return cookies, args
+
+    def test_auto_prefers_reading_the_browser_directly(self):
+        jar = [{"name": "hatch_sess", "value": "direct", "domain": ".muse.ai"}]
+        with tempfile.TemporaryDirectory() as tmp:
+            cookies, args = self.export(tmp, "auto", [(jar, "chrome (Default)")])
+            cli.cmd_auth_export(args)
+            self.assertIn("hatch_sess\tdirect", read(cookies))
+            cli._browser_cookies.assert_not_called()
+
+    def test_auto_falls_back_to_agent_browser(self):
+        jar = [{"name": "hatch_sess", "value": "agent", "domain": ".muse.ai"}]
+        with tempfile.TemporaryDirectory() as tmp:
+            cookies, args = self.export(tmp, "auto", [browsers.BrowserCookieError("no login")],
+                                        agent=(jar, None))
+            cli.cmd_auth_export(args)
+            self.assertIn("hatch_sess\tagent", read(cookies))
+
+    def test_auto_without_agent_browser_explains_how_to_log_in(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            cookies, args = self.export(tmp, "auto", [browsers.BrowserCookieError("no login")], which=None)
+            with patch("sys.stderr", new_callable=io.StringIO) as err, \
+                    self.assertRaises(SystemExit):
+                cli.cmd_auth_export(args)
+            self.assertIn("Log in at https://muse.ai/", err.getvalue())
+            self.assertNotIn("npm i -g", err.getvalue())
+            self.assertFalse(os.path.exists(cookies))
+
+    def test_named_browser_failure_does_not_fall_back(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            cookies, args = self.export(tmp, "brave", [browsers.BrowserCookieError("no brave profile found")])
+            with patch("sys.stderr", new_callable=io.StringIO) as err, \
+                    self.assertRaises(SystemExit):
+                cli.cmd_auth_export(args)
+            self.assertIn("no brave profile found", err.getvalue())
+            cli._browser_cookies.assert_not_called()
+
+    def test_invalid_session_leaves_existing_cookies_unchanged(self):
+        for value, expires in (("", 0), ("expired", 1)):
+            for browser in ("auto", "agent-browser"):
+                with self.subTest(value=value, browser=browser), tempfile.TemporaryDirectory() as tmp:
+                    jar = [{"name": "hatch_sess", "value": value, "expires": expires,
+                            "domain": ".muse.ai"}]
+                    cookies, args = self.export(tmp, browser, [(jar, "chrome (Default)")],
+                                                agent=(jar, None))
+                    with open(cookies, "w") as fh:
+                        fh.write("hatch_sess=keep")
+                    with patch("sys.stderr", new_callable=io.StringIO), \
+                            self.assertRaises(SystemExit):
+                        cli.cmd_auth_export(args)
+                    self.assertEqual(read(cookies), "hatch_sess=keep")
+                    self.assertFalse(os.path.exists(cookies + ".bak"))
+
+    def test_agent_browser_accepts_session_cookie_without_expiration(self):
+        jar = [{"name": "hatch_sess", "value": "session", "expires": -1,
+                "domain": ".muse.ai"}]
+        with tempfile.TemporaryDirectory() as tmp:
+            cookies, args = self.export(tmp, "agent-browser", [], agent=(jar, None))
+            cli.cmd_auth_export(args)
+            self.assertIn("hatch_sess\tsession", read(cookies))
+            cli.browsers.read_cookies.assert_not_called()
+
+    def test_named_browser_is_rejected_off_macos(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            cookies, args = self.export(tmp, "chrome", [])
+            cli.browsers.supported.return_value = False
+            with patch("sys.stderr", new_callable=io.StringIO) as err, \
+                    self.assertRaises(SystemExit):
+                cli.cmd_auth_export(args)
+            self.assertIn("macOS-only", err.getvalue())
+            cli.browsers.read_cookies.assert_not_called()
+            cli._browser_cookies.assert_not_called()
+            self.assertFalse(os.path.exists(cookies))
+
+    def test_missing_cookie_error_does_not_require_remote_debugging(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            with self.assertRaises(cli.AuthError) as cm:
+                cli.connect({"cookies_file": os.path.join(tmp, "missing")})
+        self.assertIn("muse-cli auth export", str(cm.exception))
+        self.assertNotIn("remote debugging", str(cm.exception))
 
 
 @unittest.skipIf(os.name == "nt", "a closed pipe is not a BrokenPipeError on Windows")

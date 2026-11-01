@@ -95,9 +95,29 @@ chat / feed / goals / ideas / sessions / ...
   `session_id` in the body did not move the run into that side chat; the
   user message and the agent's reply landed in the main chat.
 - POSTs to muse.ai need browser `Sec-Fetch-*` headers or they return 403.
-- `auth export` reads cookies from the user's own Google Chrome through
-  agent-browser `--auto-connect`. Chrome 144+ shares that profile only after
-  remote debugging is enabled at `chrome://inspect/#remote-debugging`. The
-  export follows the active tab, so a muse.ai tab has to be focused first,
-  and it must never overwrite a working jar without a `hatch_sess` in the
-  new one. A freshly launched browser has no login; do not fall back to one.
+- `auth export` on macOS decrypts the muse.ai rows of the browser's own cookie
+  database (`~/Library/Application Support/<browser>/<profile>/{Network/,}Cookies`,
+  Chrome, Brave, Arc, Edge, Chromium). Values are `v10` + AES-128-CBC, key =
+  PBKDF2-HMAC-SHA1(password from keychain item "<Browser> Safe Storage",
+  salt `saltysalt`, 1003 rounds, 16 bytes), IV = 16 spaces. Cookie DB
+  version 24+ (Chromium 130+) prefixes the plaintext with SHA-256(host_key);
+  strip it when it matches. `expires_utc` is microseconds since 1601. The first
+  keychain read shows a macOS Allow dialog. The desktop Muse.app is not a
+  source: its OAuth tokens live in the keychain access group
+  `V9WTTPBFK9.com.meta.endo`, readable only by the app itself.
+  Copy the DB and its WAL/rollback journal together, checking their file
+  metadata before and after the copy; retry a changing store at most three
+  times. A checkpoint during copying can otherwise silently omit cookies.
+  Expired rows are ignored before keychain access, and unreadable or
+  undecryptable profiles do not block another usable profile. Cache both
+  keys and keychain failures per browser to avoid repeated prompts.
+  Select only host keys `muse.ai` and `.muse.ai`: subdomain-only cookies are
+  not valid for the CLI's requests to `https://muse.ai/api/`.
+- Elsewhere (and with `--browser agent-browser`) `auth export` reads cookies
+  from the user's own Google Chrome through agent-browser `--auto-connect`.
+  Chrome 144+ shares that profile only after remote debugging is enabled at
+  `chrome://inspect/#remote-debugging`. That export follows the active tab, so
+  a muse.ai tab has to be focused first.
+- Either way, `auth export` must never overwrite a working jar without a
+  non-empty, unexpired `hatch_sess` in the new one, and a freshly launched
+  browser has no login; do not fall back to one.

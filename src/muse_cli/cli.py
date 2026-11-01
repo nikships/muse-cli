@@ -1,10 +1,10 @@
 """muse-cli: CLI for your personal muse.ai agent. No browser needed after cookie export.
 
-One-time setup (also printed by `muse-cli auth export` when a step is missing):
-  1. npm i -g agent-browser
-  2. In Chrome, open chrome://inspect/#remote-debugging and turn remote debugging on.
-  3. Open https://muse.ai/ in that same window and log in. Leave the tab open.
-  4. muse-cli auth export   # saves session cookies locally (chmod 600)
+One-time setup:
+  1. Log in at https://muse.ai/ in Chrome, Brave, Arc or Edge.
+  2. muse-cli auth export   # saves session cookies locally (chmod 600)
+On Linux/Windows `auth export` needs agent-browser and Chrome remote debugging
+instead; it prints those steps when something is missing.
 
 Then: muse-cli status | muse-cli threads | muse-cli history | muse-cli send "hello" | ...
 """
@@ -17,7 +17,7 @@ import sys
 import time
 import urllib.parse
 
-from . import __version__
+from . import __version__, browsers
 from .gateway import Gateway, AuthError, GatewayError, load_cookies
 from .update import cmd_update, finish_update_check, start_update_check
 
@@ -53,9 +53,8 @@ def connect(cfg):
     if not os.path.exists(cfg["cookies_file"]):
         raise AuthError(
             f"no cookies at {cfg['cookies_file']}. Run `muse-cli auth export` "
-            "and follow the steps it prints: turn on Chrome remote debugging at "
-            "chrome://inspect/#remote-debugging, open https://muse.ai/ in that "
-            "window, then export again.")
+            "after logging in at https://muse.ai/ in your browser, "
+            "and follow the setup steps it prints.")
     cookies = load_cookies(cfg["cookies_file"])
     if not cookies.strip():
         raise AuthError(f"cookies file {cfg['cookies_file']} is empty; run `muse-cli auth export`")
@@ -259,19 +258,52 @@ def _browser_cookies():
     return None, last_err
 
 
-def cmd_auth_export(_args):
+def _print_need_browser_login(err):
+    print(f"Could not read a muse.ai login from your browser: {err}", file=sys.stderr)
+    print(file=sys.stderr)
+    print("Log in at https://muse.ai/ in Chrome, Brave, Arc or Edge, then run", file=sys.stderr)
+    print("`muse-cli auth export` again. macOS may ask to let `security` use", file=sys.stderr)
+    print("the browser's Safe Storage key; click Allow.", file=sys.stderr)
+    print(file=sys.stderr)
+    _print_hand_copy()
+
+
+def cmd_auth_export(args):
     os.makedirs(CONFIG_DIR, exist_ok=True)
-    if shutil.which("agent-browser") is None:
-        _print_need_agent_browser()
+    choice = getattr(args, "browser", None) or "auto"
+    jar, source = None, "Chrome"
+    if choice != "agent-browser" and browsers.supported():
+        print("Reading muse.ai cookies from your browser...", file=sys.stderr)
+        try:
+            jar, source = browsers.read_cookies(choice)
+        except browsers.BrowserCookieError as e:
+            if choice != "auto":
+                print(f"cookie export failed: {e}", file=sys.stderr)
+                sys.exit(1)
+            if shutil.which("agent-browser") is None:
+                _print_need_browser_login(e)
+                sys.exit(1)
+            print(f"({e}; trying agent-browser)", file=sys.stderr)
+    elif choice not in ("auto", "agent-browser"):
+        print("cookie export failed: reading browser cookies directly is macOS-only; "
+              "use --browser agent-browser", file=sys.stderr)
         sys.exit(1)
-    print("Reading muse.ai cookies from Chrome...", file=sys.stderr)
-    jar, err = _browser_cookies()
     if jar is None:
-        _print_export_failure(err)
-        sys.exit(1)
+        if shutil.which("agent-browser") is None:
+            _print_need_agent_browser()
+            sys.exit(1)
+        print("Reading muse.ai cookies from Chrome...", file=sys.stderr)
+        jar, err = _browser_cookies()
+        if jar is None:
+            _print_export_failure(err)
+            sys.exit(1)
     # Never clobber a working login with an empty or logged-out jar.
-    if not any(c["name"] == "hatch_sess" for c in jar):
-        print("Chrome answered, but the cookies do not include hatch_sess.", file=sys.stderr)
+    now = time.time()
+    if not any(c["name"] == "hatch_sess" and c.get("value")
+               and (float(c.get("expires") or 0) <= 0 or float(c["expires"]) > now)
+               for c in jar):
+        print(f"{source} answered, but the cookies do not include a valid hatch_sess "
+              "(non-empty and unexpired).", file=sys.stderr)
         print("That cookie is set only after you log in at https://muse.ai/.", file=sys.stderr)
         print("Log in, leave the muse.ai tab open, and run `muse-cli auth export` again.",
               file=sys.stderr)
@@ -292,7 +324,8 @@ def cmd_auth_export(_args):
     fd = os.open(COOKIES_FILE, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
     with os.fdopen(fd, "w") as fh:
         fh.write("\n".join(lines) + "\n")
-    print(f"saved {len(jar)} muse.ai cookies to {COOKIES_FILE}")
+    print(f"saved {len(jar)} muse.ai cookies to {COOKIES_FILE}"
+          + (f" (from {source})" if source != "Chrome" else ""))
 
 
 def cmd_status(_args):
@@ -854,10 +887,20 @@ def main():
 
     p = sub.add_parser("auth", help="auth helpers"); a = p.add_subparsers(dest="op", required=True)
     export_help = (
-        "Copy your muse.ai login out of Google Chrome into\n"
+        "Copy your muse.ai login out of your browser into\n"
         "~/.config/muse-cli/cookies.txt (mode 600).\n"
         "\n"
-        "Chrome shares those cookies only after remote debugging is on.\n"
+        "On macOS it reads the cookies of Chrome, Brave, Arc, Edge or Chromium\n"
+        "directly: log in at https://muse.ai/ once, then run this command.\n"
+        "macOS asks once to let `security` use the browser's Safe Storage key;\n"
+        "click Allow. No Node.js or debugging port is needed, and the browser\n"
+        "can be closed.\n"
+        "Unreadable profiles are skipped if another has a usable login.\n"
+        "Subdomain-only cookies are not exported.\n"
+        "Empty or expired login cookies never replace a saved login.\n"
+        "\n"
+        "Elsewhere, or with --browser agent-browser, it reads Google Chrome through\n"
+        "agent-browser. Chrome shares those cookies only after remote debugging is on.\n"
         "In the Chrome window you already use for muse.ai:\n"
         "\n"
         "  1. Open chrome://inspect/#remote-debugging\n"
@@ -867,18 +910,23 @@ def main():
         "  4. Run this command. If Chrome asks to allow the connection,\n"
         "     click Allow, then run it again if it failed before the click.\n"
         "\n"
-        "Requires agent-browser: npm i -g agent-browser\n"
+        "That route requires agent-browser: npm i -g agent-browser\n"
         "(install Node.js LTS from https://nodejs.org first if npm is missing).\n"
         "\n"
         "Stay in that same Chrome. Starting another Chrome with\n"
         "--remote-debugging-port uses a different profile and has no muse.ai login."
     )
-    a.add_parser(
+    p = a.add_parser(
         "export",
-        help="copy the muse.ai login out of Chrome (remote debugging must be on)",
+        help="copy the muse.ai login out of your browser",
         description=export_help,
         formatter_class=argparse.RawDescriptionHelpFormatter,
-    ).set_defaults(fn=cmd_auth_export)
+    )
+    p.add_argument("--browser", default="auto",
+                   choices=["auto", *browsers.BROWSERS, "agent-browser"],
+                   help="where to read the login (default: auto = any logged-in "
+                        "Chromium browser on macOS, else agent-browser)")
+    p.set_defaults(fn=cmd_auth_export)
 
     sub.add_parser("chat", help="interactive chat (the default with no command)").set_defaults(fn=_chat)
     sub.add_parser("status", help="VM, session count, unread, identity").set_defaults(fn=cmd_status)
