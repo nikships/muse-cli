@@ -177,6 +177,33 @@ class ChatSubcommandsTest(unittest.TestCase):
         with self.assertRaises(GatewayError):
             self.c.run_cli("/status")
 
+    @patch("muse_cli.cli.cmd_status", side_effect=TimeoutError("request timed out"))
+    def test_run_cli_propagates_timeout_error(self, mock_cmd_status):
+        from muse_cli.cli import build_parser
+        self.c.parser = build_parser()
+        with self.assertRaises(TimeoutError):
+            self.c.run_cli("/status")
+
+    def test_run_cli_raw_bad_method_system_exit(self):
+        from muse_cli.cli import build_parser
+        self.c.parser = build_parser()
+        with patch("sys.stderr"):
+            with patch("builtins.print") as mock_print:
+                handled = self.c.run_cli("/raw definitely_not_a_valid_method_12345")
+                self.assertTrue(handled)
+                mock_print.assert_called_with()
+
+    @patch("muse_cli.cli._history_events", return_value=[])
+    @patch("muse_cli.cli.connect")
+    def test_run_cli_download_no_match_system_exit(self, mock_connect, mock_history):
+        from muse_cli.cli import build_parser
+        self.c.parser = build_parser()
+        with patch("sys.stderr"):
+            with patch("builtins.print") as mock_print:
+                handled = self.c.run_cli("/download nope")
+                self.assertTrue(handled)
+                mock_print.assert_called_with()
+
     def test_handle_rejects_unknown_command(self):
         from muse_cli.cli import build_parser
         self.c.parser = build_parser()
@@ -245,6 +272,73 @@ class ChatCompletionTest(unittest.TestCase):
         delims = chat.readline.get_completer_delims()
         self.assertNotIn("/", delims)
         self.assertNotIn("-", delims)
+
+
+class ChatReplSubcommandRecoveryTest(unittest.TestCase):
+    def _make_chat(self):
+        c = chat.Chat.__new__(chat.Chat)
+        from muse_cli.cli import build_parser
+        c.parser = build_parser()
+        c.st = {"session_id": "side-1", "title": "side chat"}
+        c.gw = MagicMock()
+        c.reconnect = MagicMock()
+        c.switch = MagicMock()
+        return c
+
+    @patch("muse_cli.chat.start")
+    @patch("builtins.print")
+    def test_slash_command_auth_error_prompts_login(self, mock_print, mock_start):
+        with patch("muse_cli.cli.cmd_status", side_effect=chat.AuthError("expired")):
+            c = self._make_chat()
+            mock_start.return_value = c
+            with patch("muse_cli.chat.input", side_effect=["/status", "/exit"]):
+                chat.cmd_chat(None)
+        mock_print.assert_any_call("Your login expired. Type /login to sign in again.")
+
+    @patch("muse_cli.chat.start")
+    @patch("builtins.print")
+    def test_slash_command_deleted_chat_recovers(self, mock_print, mock_start):
+        err = GatewayError(404, '{"ok":false,"error":{"code":"not_found","message":"session not found"}}')
+        with patch("muse_cli.cli.cmd_status", side_effect=err):
+            c = self._make_chat()
+            mock_start.return_value = c
+            with patch("muse_cli.chat.input", side_effect=["/status", "/exit"]):
+                chat.cmd_chat(None)
+        mock_print.assert_any_call("Chat 'side chat' was deleted. Switching to main chat.")
+        c.switch.assert_called_with(None, "main chat")
+
+    @patch("muse_cli.chat.start")
+    @patch("builtins.print")
+    def test_slash_command_timeout_error_reconnects(self, mock_print, mock_start):
+        with patch("muse_cli.cli.cmd_status", side_effect=TimeoutError("timed out")):
+            c = self._make_chat()
+            mock_start.return_value = c
+            with patch("muse_cli.chat.input", side_effect=["/status", "/exit"]):
+                chat.cmd_chat(None)
+        mock_print.assert_any_call("Connection problem (timed out). Reconnected; please try again.")
+        c.reconnect.assert_called_once()
+
+    @patch("muse_cli.chat.start")
+    def test_slash_command_system_exit_stays_in_chat(self, mock_start):
+        with patch("muse_cli.cli._history_events", return_value=[]):
+            with patch("muse_cli.cli.connect"):
+                with patch("sys.stderr"):
+                    with patch("builtins.print"):
+                        c = self._make_chat()
+                        mock_start.return_value = c
+                        with patch("muse_cli.chat.input", side_effect=["/download nope", "/exit"]) as mock_input:
+                            chat.cmd_chat(None)
+                            self.assertEqual(mock_input.call_count, 2)
+
+    @patch("muse_cli.chat.start")
+    def test_slash_command_keyboard_interrupt_stays_in_chat(self, mock_start):
+        with patch("muse_cli.cli.cmd_status", side_effect=KeyboardInterrupt):
+            with patch("builtins.print"):
+                c = self._make_chat()
+                mock_start.return_value = c
+                with patch("muse_cli.chat.input", side_effect=["/status", "/exit"]) as mock_input:
+                    chat.cmd_chat(None)
+                    self.assertEqual(mock_input.call_count, 2)
 
 
 if __name__ == "__main__":
