@@ -5,6 +5,7 @@ reader. Picks up the conversation you used last. Type /help for commands.
 """
 import json
 import os
+import shlex
 import time
 # Enable GNU readline / libedit for line editing, history, and proper
 # CJK/wide-character deletion (wcwidth). It is a standard library C extension,
@@ -14,7 +15,7 @@ try:
 except ImportError:
     readline = None
 
-from .cli import CONFIG_DIR, cmd_auth_export, connect, fmt_event, load_config, start_session
+from .cli import CONFIG_DIR, build_parser, cmd_auth_export, connect, fmt_event, load_config, start_session
 from .gateway import AuthError, GatewayError
 
 WAIT = 300   # seconds to wait for the first reply
@@ -30,6 +31,7 @@ HELP = """Commands:
   /new [title]    start a new conversation
   /history [N]    read the last N messages here (default 10)
   /login          save your muse.ai login from Chrome again (same as `muse-cli auth export`)
+  /<command>      run any muse-cli command (/status, /goals, /ideas, /files, etc.)
   /exit           quit (Ctrl+C works too)"""
 
 
@@ -58,6 +60,31 @@ class Chat:
         self.st = load_state()
         self.gw = connect(self.cfg)
         self.listing = []
+        self.parser = build_parser()
+        if readline is not None:
+            sub_actions = [a for a in self.parser._actions if a.dest == "cmd"]
+            choices = [k for k in sub_actions[0].choices if k != "chat"] if sub_actions else []
+            repl_cmds = ["chats", "open", "main", "new", "history", "login", "help", "exit", "quit"]
+            all_cmds = sorted(set(f"/{c}" for c in repl_cmds + choices))
+
+            def complete(text, state):
+                line = (readline.get_line_buffer().lstrip() if hasattr(readline, "get_line_buffer") else "") or text
+                if " " not in line and line.startswith("/"):
+                    matches = [c for c in all_cmds if c.startswith(text)]
+                    return matches[state] if state < len(matches) else None
+                return None
+
+            self.complete = complete
+            try:
+                delims = readline.get_completer_delims().replace("/", "").replace("-", "")
+                readline.set_completer_delims(delims)
+            except Exception:
+                pass
+            readline.set_completer(complete)
+            if "libedit" in (readline.__doc__ or ""):
+                readline.parse_and_bind("bind ^I rl_complete")
+            else:
+                readline.parse_and_bind("tab: complete")
 
     def scope(self):
         return {"session_id": self.st["session_id"]} if self.st["session_id"] else {}
@@ -175,6 +202,40 @@ class Chat:
         self.gw.close()
         self.gw = connect(self.cfg)
 
+    def run_cli(self, line):
+        try:
+            tokens = shlex.split(line.lstrip("/"))
+        except ValueError as e:
+            print(f"Error parsing command: {e}")
+            return True
+        if not tokens:
+            return False
+        if tokens[0] in ("chat", "exit", "quit"):
+            if tokens[0] == "chat":
+                print("Already in chat.")
+                return True
+            return False
+
+        sub_actions = [a for a in self.parser._actions if a.dest == "cmd"]
+        choices = sub_actions[0].choices if sub_actions else {}
+        if tokens[0] not in choices:
+            return False
+
+        try:
+            args = self.parser.parse_args(tokens)
+        except SystemExit:
+            return True
+
+        if getattr(args, "fn", None):
+            if hasattr(args, "thread") and args.thread is None and self.st.get("session_id"):
+                args.thread = self.st["session_id"]
+            try:
+                args.fn(args)
+            except (SystemExit, KeyboardInterrupt):
+                print()  # command stopped or exited; stay in the chat
+            return True
+        return False
+
     def handle(self, line):
         cmd, _, arg = line.partition(" ")
         arg = arg.strip()
@@ -188,12 +249,14 @@ class Chat:
             self.switch(None, "main chat")
         elif cmd == "/new":
             self.new_chat(arg)
-        elif cmd == "/history":
+        elif cmd == "/history" and (not arg or arg.isdigit()):
             self.show_history(int(arg) if arg.isdigit() else 10)
         elif cmd == "/login":
             if login():
                 self.reconnect()
                 print("Signed in.")
+        elif self.run_cli(line):
+            pass
         else:
             print("Unknown command. Type /help.")
 

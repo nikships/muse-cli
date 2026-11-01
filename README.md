@@ -215,6 +215,8 @@ muse-cli raw <method> --body '{}'                 # escape hatch: any of 258 gat
 The interactive chat prints plain text, one message per line, so it works well
 with screen readers. It resumes the conversation you used last; type `/help`
 inside it for `/chats`, `/open N`, `/main`, `/new`, `/history`, and `/login`.
+Any command above can also be run with a leading slash (`/status`, `/goals`,
+`/files`, etc.) with `<TAB>` auto-completion.
 
 Every other command prints JSON. Your VM is auto-discovered from your session, and a
 random device id is generated on first run.
