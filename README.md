@@ -49,24 +49,56 @@ curl -fsSL https://raw.githubusercontent.com/nikships/muse-cli/main/install.sh |
 
 Upgrade with `muse-cli update`. It also refreshes the agent skill if you installed one (the skill ships inside the package, so it always matches the CLI). `muse-cli update --skill` refreshes or installs just the skill, with no package upgrade, which is handy after `pip` or `pipx` installs. In a terminal it also checks PyPI once a day and, when a newer release exists, prints that command on stderr. It does not upgrade itself. Set `MUSE_NO_UPDATE_CHECK=1` to silence the notice. The check stays quiet when output is piped or `CI` is set. Remove with `uv tool uninstall muse-cli`.
 
-Logging in is a separate one-time step. Chrome shares its cookies after you
-turn on remote debugging. Follow [Log in once](#log-in-once) before running
-any other command.
+Logging in is a separate one-time step. On a Mac it is one command, run after
+you have logged in at https://muse.ai/ in your browser. Follow
+[Log in once](#log-in-once) before running any other command.
 
 ## Log in once
 
-muse-cli borrows the login you already have in Chrome, saves those cookies
-to `~/.config/muse-cli/cookies.txt` (mode `600`, only your user can read it),
-and after that talks to muse.ai directly. Access tokens are fetched fresh
-on every command. When a command later says the cookies expired, repeat this
-section.
+muse-cli borrows the login you already have in your browser, saves those
+cookies to `~/.config/muse-cli/cookies.txt` (mode `600`, only your user can
+read it), and after that talks to muse.ai directly. Access tokens are fetched
+fresh on every command. When a command later says the cookies expired, repeat
+this section.
 
+### On a Mac (Chrome, Brave, Arc, Edge or Chromium)
+
+1. Log in at https://muse.ai/ in your browser.
+2. Run:
+
+```bash
+muse-cli auth export
+muse-cli status
+```
+
+macOS asks once whether `security` may use the browser's **Safe Storage** key
+(that key decrypts the browser's cookie file). Click **Allow**, or **Always
+Allow** to skip the prompt next time. No Node.js and no debugging port are
+needed, and the browser can be closed.
+
+Success looks like this (the count varies):
+
+```
+saved 9 muse.ai cookies to /Users/you/.config/muse-cli/cookies.txt (from chrome (Default))
+```
+
+It reads every profile of every supported browser and uses the one that is
+logged in to muse.ai. Pick one with `--browser chrome|brave|arc|edge|chromium`.
+If nothing is logged in, the command says so and leaves the cookies file on
+disk as it was. `muse-cli status` then prints JSON with your VM id, how many
+chats you have, the unread count, and your identity. That means install and
+login both worked.
+
+### Linux, Windows, or Safari: agent-browser or by hand
+
+Direct reading is macOS-only and covers Chromium browsers, not Safari.
+Elsewhere (or with `muse-cli auth export --browser agent-browser`) the login
+is read from a running Google Chrome through [agent-browser](https://github.com/vercel-labs/agent-browser).
 Do the steps in order. Each one checks itself before you continue.
 
-### 1. Install the cookie reader
+#### 1. Install the cookie reader
 
-`auth export` uses [agent-browser](https://github.com/vercel-labs/agent-browser)
-to read Chrome's cookies. That package comes from npm, so you need Node.js first.
+That package comes from npm, so you need Node.js first.
 
 ```bash
 node --version    # if this fails, install Node.js LTS from https://nodejs.org
@@ -81,7 +113,7 @@ errors with `EACCES`, pick one and use it from then on: configure an
 or run the install with the same rights you use for other global npm tools.
 Then check `command -v agent-browser` prints a path.
 
-### 2. Let Chrome share cookies
+#### 2. Let Chrome share cookies
 
 Open **Google Chrome**, the same profile you use for muse.ai. Paste this in
 the address bar:
@@ -101,26 +133,21 @@ Stay in this window. Starting a second Chrome with
 `--remote-debugging-port` opens a different profile, and that profile does
 not have your muse.ai login.
 
-### 3. Be logged in, on a muse.ai tab
+#### 3. Be logged in, on a muse.ai tab
 
 In that same Chrome window, open https://muse.ai/ and log in. Leave the tab
 open. The exporter reads whichever tab is active, so the muse.ai tab has to
 be the one in front when you run the next command.
 
-### 4. Save the login
+#### 4. Save the login
 
 ```bash
-muse-cli auth export
+muse-cli auth export --browser agent-browser
 ```
 
 Chrome may ask to allow the debugging connection. Click **Allow**. If the
-command already failed, run it again after you click Allow.
-
-Success looks like this (the count varies):
-
-```
-saved 12 muse.ai cookies to /home/you/.config/muse-cli/cookies.txt
-```
+command already failed, run it again after you click Allow. Then run
+`muse-cli status` to check the connection.
 
 The command prints the fix on the failure itself. These are the ones it
 recognizes:
@@ -131,16 +158,7 @@ recognizes:
 | No muse.ai tab | Step 3. Open https://muse.ai/ in that same window and leave the tab open. |
 | No `hatch_sess` | The tab is open and you are logged out. Log in, then export again. The cookies file already on disk is left as it was. |
 | `agent-browser` is not installed | Step 1. `node --version`, then `npm i -g agent-browser`, then a new terminal. |
-| Daemon already running | A previous attempt is stuck. `agent-browser close`, then `muse-cli auth export`. |
-
-### 5. Check the connection
-
-```bash
-muse-cli status
-```
-
-You get JSON with your VM id, how many chats you have, the unread count, and
-your identity. That means install and login both worked.
+| Daemon already running | A previous attempt is stuck. `agent-browser close`, then `muse-cli auth export --browser agent-browser`. |
 
 ### Copy cookies by hand
 
@@ -239,6 +257,7 @@ skills/muse-cli/     agent skill
 src/muse_cli/
   cli.py             argument parsing and all commands
   chat.py            interactive chat (the default command)
+  browsers.py        reads the muse.ai login from Chromium browsers on macOS
   gateway.py         gateway client (auth, Noise transport, subscriptions)
   update.py          daily update notice and `muse-cli update`
   skill.py           installs and refreshes the bundled agent skill
@@ -258,10 +277,12 @@ release flow and contributor notes. Merging to `main` publishes a release.
 - Login is the [Log in once](#log-in-once) section above. Cookies live at
   `~/.config/muse-cli/cookies.txt` (mode 600). Access and gateway tokens are
   fetched fresh on every run.
-- `auth export` reads those cookies from Google Chrome through
-  [agent-browser](https://github.com/vercel-labs/agent-browser). Chrome has
-  to be open, with remote debugging on
-  (`chrome://inspect/#remote-debugging`) and a logged-in muse.ai tab in front.
+- On macOS, `auth export` decrypts the muse.ai cookies from the browser's own
+  cookie file, using the browser's Safe Storage key from your login keychain.
+  Elsewhere it reads Google Chrome through
+  [agent-browser](https://github.com/vercel-labs/agent-browser), which needs
+  Chrome open with remote debugging on (`chrome://inspect/#remote-debugging`)
+  and a logged-in muse.ai tab in front.
 - Respect muse.ai's terms and rate limits. Internal APIs are unversioned and
   can change; if calls fail, re-derive from a fresh app bundle.
 

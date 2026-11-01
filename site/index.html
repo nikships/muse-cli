@@ -127,12 +127,12 @@
 
   <section id="install" aria-labelledby="install-h">
     <h2 id="install-h">Install and log in</h2>
-    <p>Install the package, then run a one-time login. <code>auth export</code> copies your existing muse.ai session cookies from Chrome (with remote debugging on) into <code>~/.config/muse-cli/cookies.txt</code>. After that, muse-cli talks to muse.ai directly. Access tokens are fetched fresh on every run.</p>
+    <p>Install the package, then run a one-time login. <code>auth export</code> copies your existing muse.ai session cookies from Chrome, Brave, Arc or Edge on a Mac (log in at muse.ai first, no Node.js needed) into <code>~/.config/muse-cli/cookies.txt</code>. After that, muse-cli talks to muse.ai directly. Access tokens are fetched fresh on every run.</p>
     <div class="cmd">
       <button class="copy" type="button" onclick="copy(this)">copy</button>
       <code>muse-cli auth export &amp;&amp; muse-cli status</code>
     </div>
-    <p>Python 3.10 or newer. The README has the full Chrome setup steps.</p>
+    <p>Python 3.10 or newer. The README has the steps for Linux and Windows.</p>
   </section>
 
   <section id="commands" aria-labelledby="commands-h">
