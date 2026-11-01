@@ -95,5 +95,125 @@ class DeletedSideChatRecoveryTest(unittest.TestCase):
         mock_chat.gw.close.assert_called_once()
 
 
+class ChatSubcommandsTest(unittest.TestCase):
+    def setUp(self):
+        self.c = chat.Chat.__new__(chat.Chat)
+        self.c.st = {"session_id": None, "title": "main chat"}
+        self.c.gw = MagicMock()
+
+    @patch("muse_cli.cli.cmd_status")
+    def test_run_cli_subcommand(self, mock_cmd_status):
+        from muse_cli.cli import build_parser
+        self.c.parser = build_parser()
+        handled = self.c.run_cli("/status")
+        self.assertTrue(handled)
+        mock_cmd_status.assert_called_once()
+
+    @patch("muse_cli.cli.cmd_files")
+    def test_run_cli_injects_thread(self, mock_cmd_files):
+        from muse_cli.cli import build_parser
+        self.c.parser = build_parser()
+        self.c.st["session_id"] = "side-123"
+        self.c.run_cli("/files --limit 5")
+        mock_cmd_files.assert_called_once()
+        args = mock_cmd_files.call_args[0][0]
+        self.assertEqual(args.thread, "side-123")
+        self.assertEqual(args.limit, 5)
+
+    @patch("muse_cli.cli.cmd_files")
+    def test_run_cli_respects_explicit_thread(self, mock_cmd_files):
+        from muse_cli.cli import build_parser
+        self.c.parser = build_parser()
+        self.c.st["session_id"] = "side-123"
+        self.c.run_cli("/files --thread custom-thread")
+        mock_cmd_files.assert_called_once()
+        args = mock_cmd_files.call_args[0][0]
+        self.assertEqual(args.thread, "custom-thread")
+
+    def test_run_cli_handles_help_without_exit(self):
+        from muse_cli.cli import build_parser
+        self.c.parser = build_parser()
+        # --help raises SystemExit internally in argparse; run_cli must catch it
+        with patch("sys.stdout"):
+            handled = self.c.run_cli("/status --help")
+        self.assertTrue(handled)
+
+    def test_run_cli_handles_invalid_flags_without_exit(self):
+        from muse_cli.cli import build_parser
+        self.c.parser = build_parser()
+        with patch("sys.stderr"):
+            handled = self.c.run_cli("/status --nonexistent-flag-123")
+        self.assertTrue(handled)
+
+    def test_handle_rejects_unknown_command(self):
+        from muse_cli.cli import build_parser
+        self.c.parser = build_parser()
+        with patch("builtins.print") as mock_print:
+            self.c.handle("/notarealcommand")
+            mock_print.assert_called_with("Unknown command. Type /help.")
+
+    def test_handle_chat_subcommand_in_chat(self):
+        from muse_cli.cli import build_parser
+        self.c.parser = build_parser()
+        with patch("builtins.print") as mock_print:
+            self.c.handle("/chat")
+            mock_print.assert_called_with("Already in chat.")
+
+
+class ChatCompletionTest(unittest.TestCase):
+    @patch("muse_cli.chat.connect")
+    @patch("muse_cli.chat.load_config")
+    @patch("muse_cli.chat.load_state")
+    def test_completer_matches_slash_commands(self, mock_state, mock_cfg, mock_connect):
+        mock_state.return_value = {"session_id": None, "title": "main chat"}
+        mock_cfg.return_value = {}
+        c = chat.Chat()
+        if chat.readline is None:
+            self.skipTest("readline not available")
+
+        # Exact match
+        self.assertEqual(c.complete("/status", 0), "/status")
+        self.assertIsNone(c.complete("/status", 1))
+
+        # Prefix match
+        self.assertEqual(c.complete("/st", 0), "/status")
+
+        # Goal commands
+        matches = []
+        i = 0
+        while True:
+            m = c.complete("/goa", i)
+            if not m:
+                break
+            matches.append(m)
+            i += 1
+        self.assertIn("/goal", matches)
+        self.assertIn("/goals", matches)
+
+        # REPL-specific navigation commands
+        self.assertEqual(c.complete("/ch", 0), "/chats")
+
+        # Multi-word hyphenated commands
+        self.assertEqual(c.complete("/feed-p", 0), "/feed-prompt")
+        matches = []
+        i = 0
+        while True:
+            m = c.complete("/session-", i)
+            if not m:
+                break
+            matches.append(m)
+            i += 1
+        self.assertIn("/session-archive", matches)
+        self.assertIn("/session-start", matches)
+
+        # Non-slash text should return no matches
+        self.assertIsNone(c.complete("hello", 0))
+
+        # Check delimiter configuration
+        delims = chat.readline.get_completer_delims()
+        self.assertNotIn("/", delims)
+        self.assertNotIn("-", delims)
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -847,7 +847,7 @@ def _chat(args):
     cmd_chat(args)
 
 
-def main():
+def build_parser():
     ap = argparse.ArgumentParser(prog="muse-cli", description="CLI for your personal muse.ai agent")
     ap.add_argument("--version", action="version", version=f"%(prog)s {__version__}")
     sub = ap.add_subparsers(dest="cmd")
@@ -952,8 +952,12 @@ def main():
     p.add_argument("method"); p.add_argument("--body", default=None)
     p.add_argument("--param", action="append", default=[], help="path param k=v (repeatable)")
     p.add_argument("--timeout", type=int, default=30); p.set_defaults(fn=cmd_raw)
+    return ap
 
-    args = ap.parse_args()
+
+def main(argv=None):
+    ap = build_parser()
+    args = ap.parse_args(argv)
     if args.cmd is None:
         args.cmd, args.fn = "chat", _chat
     # A piped command prints JSON. The notice stays off unless both streams

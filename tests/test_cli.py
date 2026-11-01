@@ -188,5 +188,16 @@ class InterruptTest(unittest.TestCase):
         self.assertNotIn("Traceback", err.getvalue())
 
 
+class BuildParserTest(unittest.TestCase):
+    def test_build_parser_registers_all_commands(self):
+        ap = cli.build_parser()
+        sub_actions = [a for a in ap._actions if a.dest == "cmd"]
+        self.assertTrue(sub_actions)
+        choices = sub_actions[0].choices
+        expected = {"auth", "chat", "status", "threads", "history", "send", "files",
+                    "download", "watch", "feed", "goals", "ideas", "unread", "raw"}
+        self.assertTrue(expected.issubset(set(choices.keys())))
+
+
 if __name__ == "__main__":
     unittest.main()
