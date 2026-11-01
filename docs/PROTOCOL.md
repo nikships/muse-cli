@@ -34,6 +34,12 @@ chat / feed / goals / ideas / sessions / ...
   exists in the client for other configurations.
 - **Framing:** `NoiseTransportFrame{chunk_id(i64), chunk_index, total_chunks,
   payload}` protobuf → Noise transport encrypt → one WS binary frame each.
+  A reply larger than one Noise message (65535 bytes) is split across several
+  frames that share a `chunk_id` (`total_chunks > 1`, `chunk_index` 0-based).
+  Only the concatenated payloads parse as a `ServiceResponse`; parsing a single
+  chunk fails with `DecodeError: Wire format was corrupt`. Frames of different
+  `chunk_id`s can interleave, so `Gateway._read_frame()` buffers per id.
+  (`egress.approvals` returns ~123 KB and hit this.)
 - **Request:** `ServiceRequest{service, payload =
   ServiceFrame{stream_id, request =
   ApplicationRequest{verb, path, headers, body, end_body}}}`. Stream ids start
