@@ -231,8 +231,8 @@ class Chat:
                 args.thread = self.st["session_id"]
             try:
                 args.fn(args)
-            except Exception as e:
-                print(f"Error: {e}")
+            except (SystemExit, KeyboardInterrupt):
+                print()  # command stopped or exited; stay in the chat
             return True
         return False
 

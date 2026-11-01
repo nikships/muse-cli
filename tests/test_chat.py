@@ -145,6 +145,38 @@ class ChatSubcommandsTest(unittest.TestCase):
             handled = self.c.run_cli("/status --nonexistent-flag-123")
         self.assertTrue(handled)
 
+    @patch("muse_cli.cli.cmd_download", side_effect=SystemExit(1))
+    def test_run_cli_handles_handler_system_exit(self, mock_cmd_download):
+        from muse_cli.cli import build_parser
+        self.c.parser = build_parser()
+        with patch("builtins.print") as mock_print:
+            handled = self.c.run_cli("/download nope")
+            self.assertTrue(handled)
+            mock_print.assert_called_with()
+
+    @patch("muse_cli.cli.cmd_status", side_effect=KeyboardInterrupt)
+    def test_run_cli_handles_handler_keyboard_interrupt(self, mock_cmd_status):
+        from muse_cli.cli import build_parser
+        self.c.parser = build_parser()
+        with patch("builtins.print") as mock_print:
+            handled = self.c.run_cli("/status")
+            self.assertTrue(handled)
+            mock_print.assert_called_with()
+
+    @patch("muse_cli.cli.cmd_status", side_effect=chat.AuthError("expired"))
+    def test_run_cli_propagates_auth_error(self, mock_cmd_status):
+        from muse_cli.cli import build_parser
+        self.c.parser = build_parser()
+        with self.assertRaises(chat.AuthError):
+            self.c.run_cli("/status")
+
+    @patch("muse_cli.cli.cmd_status", side_effect=GatewayError(404, "session not found"))
+    def test_run_cli_propagates_gateway_error(self, mock_cmd_status):
+        from muse_cli.cli import build_parser
+        self.c.parser = build_parser()
+        with self.assertRaises(GatewayError):
+            self.c.run_cli("/status")
+
     def test_handle_rejects_unknown_command(self):
         from muse_cli.cli import build_parser
         self.c.parser = build_parser()
