@@ -85,6 +85,7 @@ saved 9 muse.ai cookies to /Users/you/.config/muse-cli/cookies.txt (from chrome 
 It reads every profile of every supported browser and uses the one that is
 logged in to muse.ai. Pick one with `--browser chrome|brave|arc|edge|chromium`.
 Unreadable profiles are skipped if another profile has a usable login.
+Only cookies valid for `muse.ai` are exported, not subdomain-only cookies.
 Expired cookies are ignored, and an empty or expired `hatch_sess` never
 replaces your saved login. If the cookie database keeps changing during the
 read, close the browser and retry.

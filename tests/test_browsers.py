@@ -69,6 +69,8 @@ class ReadCookiesTest(unittest.TestCase):
             row("muse.ai", "hatch_native_auth_device", "DEV"),
             row(".example.com", "other", "NOPE"),
             row(".notmuse.ai", "other", "NOPE"),
+            row("other.muse.ai", "hatch_sess", "SUBDOMAIN"),
+            row(".other.muse.ai", "subdomain_only", "NOPE"),
         ])
         jar, source = self.read()
         self.assertEqual(source, "chrome (Default)")
@@ -101,6 +103,20 @@ class ReadCookiesTest(unittest.TestCase):
         with self.assertRaisesRegex(browsers.BrowserCookieError, "no muse.ai login"):
             self.read()
         self.assertEqual(self.asked, [])
+
+    def test_subdomain_login_does_not_authenticate_muse_ai(self):
+        self.chrome("Default", [row("other.muse.ai", "hatch_sess", "SUBDOMAIN")])
+        with self.assertRaisesRegex(browsers.BrowserCookieError, "no muse.ai login"):
+            self.read()
+        self.assertEqual(self.asked, [])
+
+    def test_subdomain_login_does_not_hide_a_usable_profile(self):
+        self.chrome("Default", [row(".other.muse.ai", "hatch_sess", "SUBDOMAIN")])
+        self.chrome("Profile 1", [row("muse.ai", "hatch_sess", "LIVE", expires=0)])
+        jar, source = self.read()
+        self.assertEqual(source, "chrome (Profile 1)")
+        self.assertEqual(jar[0]["value"], "LIVE")
+        self.assertEqual(self.asked, ["Chrome Safe Storage"])
 
     def test_expired_login_never_touches_the_keychain(self):
         self.chrome("Default", [row(".muse.ai", "hatch_sess", "OLD",

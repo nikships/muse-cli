@@ -111,6 +111,8 @@ chat / feed / goals / ideas / sessions / ...
   Expired rows are ignored before keychain access, and unreadable or
   undecryptable profiles do not block another usable profile. Cache both
   keys and keychain failures per browser to avoid repeated prompts.
+  Select only host keys `muse.ai` and `.muse.ai`: subdomain-only cookies are
+  not valid for the CLI's requests to `https://muse.ai/api/`.
 - Elsewhere (and with `--browser agent-browser`) `auth export` reads cookies
   from the user's own Google Chrome through agent-browser `--auto-connect`.
   Chrome 144+ shares that profile only after remote debugging is enabled at

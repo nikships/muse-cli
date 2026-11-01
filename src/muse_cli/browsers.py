@@ -87,7 +87,7 @@ def _muse_rows(path):
                 try:
                     return db.execute(
                         "SELECT host_key, name, path, is_secure, expires_utc, value, encrypted_value "
-                        "FROM cookies WHERE host_key = 'muse.ai' OR host_key LIKE '%.muse.ai'").fetchall()
+                        "FROM cookies WHERE host_key IN ('muse.ai', '.muse.ai')").fetchall()
                 finally:
                     db.close()
     except (OSError, sqlite3.Error) as e:

@@ -896,6 +896,7 @@ def main():
         "click Allow. No Node.js or debugging port is needed, and the browser\n"
         "can be closed.\n"
         "Unreadable profiles are skipped if another has a usable login.\n"
+        "Subdomain-only cookies are not exported.\n"
         "Empty or expired login cookies never replace a saved login.\n"
         "\n"
         "Elsewhere, or with --browser agent-browser, it reads Google Chrome through\n"

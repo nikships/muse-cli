@@ -65,6 +65,7 @@ cookie values are never printed; do not print the cookies file either.
   `chrome`, `arc`, `edge`, `chromium`). Safari is not supported; use 2d.
 - Expired cookies are ignored. Empty or expired `hatch_sess` cookies never
   replace a saved login. Unreadable profiles are skipped if another works.
+- Only cookies valid for `muse.ai` are exported, not subdomain-only cookies.
 - `cookie database changed while reading ...`: close that browser and rerun
   once. The command retries a changing database at most three times.
 - On Linux or Windows, or if the Mac route is not possible, use 2b.
