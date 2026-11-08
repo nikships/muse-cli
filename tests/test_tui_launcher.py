@@ -108,6 +108,20 @@ class PrepareTest(unittest.TestCase):
             run.assert_called_once()
         self.assertTrue((dest / tui.MARKER).exists())
 
+    def test_new_version_prunes_stale_copies(self):
+        root = tui.cache_root()
+        old = root / "aaaaaaaaaaaa"
+        busy = root / "bbbbbbbbbbbb"
+        for d in (old, busy):
+            (d / "src").mkdir(parents=True)
+        stale = tui.time.time() - tui.STALE_AFTER - 60
+        os.utime(old, (stale, stale))
+        with patch.object(tui.subprocess, "run", return_value=done()):
+            d = tui.prepare("/b", src=self.app)
+        self.assertTrue(d.is_dir())
+        self.assertFalse(old.exists())
+        self.assertTrue(busy.exists())
+
     def test_tui_dir_runs_in_place(self):
         with patch.dict(os.environ, {"MUSE_CLI_TUI_DIR": str(self.app)}), \
                 patch.object(tui.subprocess, "run", return_value=done()) as run:
@@ -136,6 +150,7 @@ class RunAppTest(unittest.TestCase):
         self.assertEqual(argv, ["/b", str(Path("/app") / "src" / "main.tsx")])
         self.assertEqual(env["MUSE_CLI_PYTHON"], tui.sys.executable)
         self.assertEqual(env["MUSE_CLI_DEMO"], "1")
+        self.assertEqual(env["NODE_ENV"], "production")
         proc.wait.return_value = 3
         with patch.dict(os.environ, {}, clear=False), \
                 patch.object(tui.subprocess, "Popen", return_value=proc) as popen:

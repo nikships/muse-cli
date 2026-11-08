@@ -2,7 +2,7 @@ import { TextAttributes, type InputRenderable } from "@opentui/core"
 import { useKeyboard, useTerminalDimensions } from "@opentui/react"
 import { useMemo, useRef, useState } from "react"
 import type { Controller } from "../controller"
-import { useApp, useS, useSyntaxStyle, useTick } from "../context"
+import { useApp, useRenderNode, useS, useSyntaxStyle, useTick } from "../context"
 import { fuzzyScore, truncate } from "../format"
 import { VIEWS, type State } from "../store"
 import { gradientAt, theme } from "../theme"
@@ -257,6 +257,7 @@ function detailHeight(body: string, w: number, max: number, loading: boolean): n
 
 export function Detail(props: { title: string; subtitle?: string; body: string; loading?: boolean }) {
   const style = useSyntaxStyle()
+  const renderNode = useRenderNode()
   const dims = useTerminalDimensions()
   const tick = useTick(80, !!props.loading)
   return (
@@ -267,7 +268,7 @@ export function Detail(props: { title: string; subtitle?: string; body: string; 
         {props.loading ? (
           <text fg={theme.textMuted}>{`${spinner(tick)} loading…`}</text>
         ) : (
-          <markdown content={props.body || "_Nothing more to show._"} syntaxStyle={style} conceal fg={theme.text} />
+          <markdown content={props.body || "_Nothing more to show._"} syntaxStyle={style} renderNode={renderNode} conceal fg={theme.text} />
         )}
       </scrollbox>
       <box flexDirection="row" gap={2} marginTop={1}>

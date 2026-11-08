@@ -1,6 +1,6 @@
 import type { ScrollBoxRenderable } from "@opentui/core"
 import { forwardRef, memo, useEffect, useMemo, useRef, useState } from "react"
-import { useApp, useS, useSyntaxStyle, useTick } from "../context"
+import { useApp, useRenderNode, useS, useSyntaxStyle, useTick } from "../context"
 import { bytes, clock, dayLabel, fileName, truncate } from "../format"
 import type { FileRef, Message } from "../protocol"
 import type { Pending } from "../store"
@@ -23,7 +23,6 @@ function FileChips(props: { files: FileRef[] }) {
             border
             borderStyle="rounded"
             borderColor={theme.divider}
-            backgroundColor={theme.card}
             paddingX={1}
             flexDirection="row"
             onMouseDown={() => ctl.download(f.path)}
@@ -70,6 +69,7 @@ function useTypewriter(target: string, active: boolean): string {
 
 export const AssistantMessage = memo(function AssistantMessage(props: { m: Message; streaming?: boolean }) {
   const style = useSyntaxStyle()
+  const renderNode = useRenderNode()
   const { m } = props
   const text = useTypewriter(m.text, !!props.streaming)
   const tick = useTick(80, !!props.streaming)
@@ -84,7 +84,7 @@ export const AssistantMessage = memo(function AssistantMessage(props: { m: Messa
       </box>
       {text ? (
         <box paddingLeft={2}>
-          <markdown content={props.streaming ? text + " ▍" : text} syntaxStyle={style} conceal streaming={!!props.streaming} fg={theme.text} />
+          <markdown content={props.streaming ? text + " ▍" : text} syntaxStyle={style} renderNode={renderNode} conceal streaming={!!props.streaming} fg={theme.text} />
         </box>
       ) : null}
       <FileChips files={m.files} />
@@ -156,7 +156,7 @@ function Welcome(props: { title: string; main: boolean }) {
       <text fg={theme.textMuted}>{props.main ? "Ask me anything, or try one of these:" : "A fresh side chat. Try one of these:"}</text>
       <box flexDirection="column" gap={0} marginTop={1}>
         {SUGGESTIONS.map((s, i) => (
-          <box key={s} onMouseDown={() => ctl.send(s)} paddingX={2} border borderStyle="rounded" borderColor={theme.divider} backgroundColor={theme.card}>
+          <box key={s} onMouseDown={() => ctl.send(s)} paddingX={2} border borderStyle="rounded" borderColor={theme.divider}>
             <text selectable={false}>
               <span fg={gradientAt(i / SUGGESTIONS.length)}>{"✦ "}</span>
               <span fg={theme.text}>{s}</span>

@@ -153,7 +153,7 @@ export const Composer = forwardRef<ComposerHandle, { focused: boolean }>(functio
           border
           borderStyle="rounded"
           borderColor={theme.divider}
-          backgroundColor={theme.card}
+          backgroundColor={theme.bg}
           paddingX={1}
         >
           {matches.slice(0, 8).map((c, i) => {
@@ -178,7 +178,6 @@ export const Composer = forwardRef<ComposerHandle, { focused: boolean }>(functio
         border
         borderStyle="rounded"
         borderColor={border}
-        backgroundColor={theme.card}
         paddingX={1}
         height={lines + 2}
         bottomTitle={props.focused ? (awaiting ? " Muse is replying · you can keep typing " : " ↵ send · ⇧↵ newline · / commands ") : undefined}
@@ -191,8 +190,8 @@ export const Composer = forwardRef<ComposerHandle, { focused: boolean }>(functio
           placeholderColor={theme.textFaint}
           textColor={theme.text}
           focusedTextColor="#FFFFFF"
-          backgroundColor={theme.card}
-          focusedBackgroundColor={theme.card}
+          backgroundColor={theme.bg}
+          focusedBackgroundColor={theme.bg}
           cursorColor={theme.metaBlue}
           selectionBg={theme.selection}
           wrapMode="word"

@@ -46,6 +46,9 @@ export function panelItems(s: State, view: View): PanelItem[] {
   }
 }
 
+// Panel width from which Mail shows the open thread beside the list.
+export const MAIL_SPLIT = 80
+
 export const PANEL_HINTS: Record<Exclude<View, "chat">, string> = {
   feed: "↑↓ move  ↵ read  l like  h love  d less like this  r refresh",
   goals: "↑↓ move  ↵ details  r refresh",
@@ -71,7 +74,6 @@ function Card(props: { selected: boolean; id: string; children: ReactNode; onCli
       border
       borderStyle="rounded"
       borderColor={props.selected ? (props.accent ?? theme.metaBlue) : theme.divider}
-      backgroundColor={props.selected ? theme.card : theme.surface}
       paddingX={1}
       flexDirection="column"
       marginBottom={0}
@@ -265,7 +267,7 @@ export function Panel(props: { view: Exclude<View, "chat">; width: number }) {
   const scroll = useRef<ScrollBoxRenderable>(null)
   const meta = VIEWS.find((v) => v.id === view)!
   const mailbox = useS((s) => s.mail.data?.mailbox)
-  const split = view === "mail" && props.width >= 90
+  const split = view === "mail" && props.width >= MAIL_SPLIT
 
   useEffect(() => {
     scroll.current?.scrollChildIntoView(`row-${index}`)

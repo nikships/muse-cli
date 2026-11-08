@@ -1,4 +1,4 @@
-import { SyntaxStyle, RGBA } from "@opentui/core"
+import { BoxRenderable, SyntaxStyle, RGBA, type MarkdownOptions } from "@opentui/core"
 import { useRenderer } from "@opentui/react"
 import { createContext, useContext, useEffect, useMemo, useState } from "react"
 import type { Controller } from "./controller"
@@ -36,6 +36,39 @@ export function useNow(ms = 30_000): number {
     return () => clearInterval(id)
   }, [ms])
   return now
+}
+
+type RenderNode = NonNullable<MarkdownOptions["renderNode"]>
+const renderNodes = new WeakMap<object, RenderNode>()
+
+// Frames fenced code blocks in a titled card so they read as code even when
+// no Tree-sitter grammar exists for the language.
+export function useRenderNode(): RenderNode {
+  const renderer = useRenderer()
+  let fn = renderNodes.get(renderer)
+  if (!fn) {
+    fn = (token, context) => {
+      if (token.type !== "code") return undefined
+      const inner = context.defaultRender()
+      if (!inner) return null
+      const lang = String((token as any).lang ?? "").split(/\s+/)[0]
+      const box = new BoxRenderable(renderer, {
+        border: true,
+        borderStyle: "rounded",
+        borderColor: theme.divider,
+        title: lang ? ` ${lang} ` : undefined,
+        titleAlignment: "right",
+        paddingX: 1,
+        width: "100%",
+        flexShrink: 0,
+      })
+      inner.marginBottom = 0
+      box.add(inner)
+      return box
+    }
+    renderNodes.set(renderer, fn)
+  }
+  return fn
 }
 
 // A SyntaxStyle lives in one renderer's native scene, so cache one per renderer.

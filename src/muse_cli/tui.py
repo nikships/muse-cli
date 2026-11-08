@@ -13,12 +13,14 @@ import signal
 import subprocess
 import sys
 import tempfile
+import time
 from pathlib import Path
 
 MIN_BUN = (1, 3, 14)
 APP_DIR = Path(__file__).parent / "tui"
 SKIP = {"node_modules", ".DS_Store", "__pycache__"}
 MARKER = ".muse-cli-installed"
+STALE_AFTER = 3600
 
 
 class SetupError(RuntimeError):
@@ -106,6 +108,25 @@ def copy_app(src, dest):
             shutil.rmtree(tmp, ignore_errors=True)
 
 
+def prune_cache(keep):
+    """Remove copies of older app versions left by earlier upgrades."""
+    try:
+        siblings = list(keep.parent.iterdir())
+    except OSError:
+        return
+    now = time.time()
+    for p in siblings:
+        if p == keep or not p.is_dir():
+            continue
+        try:
+            # A copy another launch is still using, or setting up, stays.
+            if now - p.stat().st_mtime < STALE_AFTER:
+                continue
+        except OSError:
+            continue
+        shutil.rmtree(p, ignore_errors=True)
+
+
 def prepare(bun, src=APP_DIR):
     """Return a directory where `bun src/main.tsx` can run."""
     override = os.environ.get("MUSE_CLI_TUI_DIR")
@@ -130,6 +151,7 @@ def prepare(bun, src=APP_DIR):
     bun_install(bun, dest)
     # Written last, so an interrupted install runs again next time.
     marker.write_text("ok\n")
+    prune_cache(dest)
     return dest
 
 
@@ -171,6 +193,8 @@ def offer_bun_install():
 
 def run_app(bun, directory, demo):
     env = dict(os.environ, MUSE_CLI_PYTHON=sys.executable)
+    # React's development build is much slower at rendering.
+    env.setdefault("NODE_ENV", "production")
     if demo:
         env["MUSE_CLI_DEMO"] = "1"
     proc = subprocess.Popen([bun, str(Path(directory) / "src" / "main.tsx")], env=env)

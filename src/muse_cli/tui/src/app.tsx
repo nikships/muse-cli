@@ -8,7 +8,7 @@ import { Kbd } from "./components/common"
 import { Composer, type ComposerHandle } from "./components/Composer"
 import { Header } from "./components/Header"
 import { Confirm, Detail, Help, Palette, Prompt, Toasts } from "./components/Overlays"
-import { Panel, panelItems, toMarkdown } from "./components/Panels"
+import { MAIL_SPLIT, Panel, panelItems, toMarkdown } from "./components/Panels"
 import { SIDEBAR_WIDTH, Sidebar } from "./components/Sidebar"
 import { Splash } from "./components/Splash"
 import { Transcript } from "./components/Transcript"
@@ -103,7 +103,7 @@ export function App() {
           ctl.showDetail(`Run ${it.v.run_id}`, it.v.status, async () => toMarkdown(it.v))
           return true
         case "thread":
-          if (mainWidth >= 90) ctl.openMailThread(it.v.id)
+          if (mainWidth - 4 >= MAIL_SPLIT) ctl.openMailThread(it.v.id)
           else
             ctl.showDetail(it.v.subject || "(no subject)", it.v.last_from, async () => {
               const res = await ctl.bridge.request("email_thread", { id: it.v.id })
