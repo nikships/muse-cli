@@ -33,7 +33,7 @@ export type ConnectionState = "connecting" | "online" | "offline" | "auth_needed
 
 export type ErrorKind = "auth" | "not_found" | "gateway" | "timeout" | "bad_request" | "internal" | "bridge"
 
-export type BridgeErrorShape = { kind: ErrorKind; message: string; status?: number }
+export type BridgeErrorShape = { kind: ErrorKind; message: string; status?: number; code?: string }
 
 export type FeedUnit = {
   id: string

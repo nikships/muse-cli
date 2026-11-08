@@ -3,7 +3,7 @@
 import type { Transport } from "../src/bridge"
 import type { Message, Session } from "../src/protocol"
 
-export type FakeOptions = { authFails?: boolean; delayMs?: number; streamMs?: number }
+export type FakeOptions = { authFails?: boolean; mailOff?: boolean; delayMs?: number; streamMs?: number }
 
 const now = Date.now()
 const min = 60_000
@@ -129,6 +129,7 @@ export function createFakeTransport(opts: FakeOptions = {}): Transport & { sent:
       case "task_runs":
         return { runs: [{ run_id: "r1", job_id: "t1", status: "completed", scheduled: "2026-11-06 09:00", summary: "Reminded you" }] }
       case "email":
+        if (opts.mailOff) throw { kind: "gateway", status: 403, code: "email_not_enabled", message: "Muse mail is not enabled for this account" }
         return { mailbox: { address: "muse@example.com" }, threads: [{ id: "th1", subject: "Your flight to Lisbon", messages: 2, last_from: "TAP", last_date: "2026-11-07 18:20", preview: "Check-in opens tomorrow" }] }
       case "email_thread":
         return { messages: [{ id: "em1", from: "TAP <no-reply@flytap.example>", subject: "Your flight to Lisbon", date: "2026-11-07 18:20", text: "Check-in opens tomorrow." }] }
@@ -155,7 +156,7 @@ export function createFakeTransport(opts: FakeOptions = {}): Transport & { sent:
         try {
           emit({ id: req.id, result: handle(req.method, req.params ?? {}) })
         } catch (e: any) {
-          emit({ id: req.id, error: { kind: e.kind ?? "internal", message: e.message ?? String(e), status: e.status } })
+          emit({ id: req.id, error: { kind: e.kind ?? "internal", message: e.message ?? String(e), status: e.status, code: e.code } })
         }
       }, delay)
     },

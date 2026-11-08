@@ -6,10 +6,12 @@ import type { BridgeErrorShape, ErrorKind, Events, Methods } from "./protocol"
 export class BridgeError extends Error {
   kind: ErrorKind
   status?: number
+  code?: string
   constructor(shape: BridgeErrorShape) {
     super(shape.message)
     this.kind = shape.kind
     this.status = shape.status
+    this.code = shape.code
   }
 }
 

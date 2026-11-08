@@ -63,6 +63,26 @@ def to_message(ev):
             "files": files}
 
 
+def server_reason(e):
+    """(code, message) from a gateway error body such as {"error": {...}}."""
+    body = e.payload
+    if isinstance(body, (bytes, bytearray)):
+        body = body.decode("utf-8", "replace")
+    if isinstance(body, str):
+        try:
+            body = json.loads(body)
+        except ValueError:
+            return None, None
+    err = body.get("error") if isinstance(body, dict) else None
+    if isinstance(err, str):
+        return None, err
+    if not isinstance(err, dict):
+        return None, None
+    code = err.get("code") if isinstance(err.get("code"), str) else None
+    message = err.get("message") if isinstance(err.get("message"), str) else None
+    return code, message
+
+
 def to_messages(events):
     return [m for m in map(to_message, events) if m]
 
@@ -402,7 +422,13 @@ class Backend:
             return {"kind": "auth", "message": str(e)}
         if isinstance(e, GatewayError):
             kind = "not_found" if is_not_found(e) else "gateway"
-            return {"kind": kind, "message": str(e), "status": e.status}
+            out = {"kind": kind, "message": str(e), "status": e.status}
+            code, message = server_reason(e)
+            if message:
+                out["message"] = message
+            if code:
+                out["code"] = code
+            return out
         if isinstance(e, TimeoutError):
             return {"kind": "timeout", "message": str(e)}
         # Most likely a dropped connection: reconnect so the next try works.

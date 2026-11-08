@@ -341,7 +341,8 @@ export class Controller {
       } else if (view === "files") data = (await this.bridge.request("files", { limit: 80 })).files
       this.store.set({ [key]: { status: "ready", data, at: Date.now() } } as any)
     } catch (e) {
-      this.store.set({ [key]: { ...cur, status: "error", error: errText(e) } } as any)
+      const off = e instanceof BridgeError && !!e.code?.endsWith("_not_enabled")
+      this.store.set({ [key]: { ...cur, status: "error", error: errText(e), off } } as any)
       if (e instanceof BridgeError && e.kind === "auth") this.askLogin()
     }
   }

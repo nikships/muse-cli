@@ -26,7 +26,8 @@ export const VIEWS: { id: View; label: string; icon: string; hint: string }[] = 
   { id: "files", label: "Files", icon: "▤", hint: "Images and files in this chat" },
 ]
 
-export type Loadable<T> = { status: "idle" | "loading" | "ready" | "error"; data?: T; error?: string; at?: number }
+// `off`: the account doesn't have this feature, so retrying won't help.
+export type Loadable<T> = { status: "idle" | "loading" | "ready" | "error"; data?: T; error?: string; off?: boolean; at?: number }
 
 export type Toast = { id: number; text: string; level: "info" | "success" | "error"; at: number }
 

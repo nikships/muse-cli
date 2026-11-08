@@ -291,7 +291,12 @@ export function Panel(props: { view: Exclude<View, "chat">; width: number }) {
         </text>
       </box>
       <box height={1} flexShrink={0} />
-      {state.status === "error" ? (
+      {state.status === "error" && state.off ? (
+        <box flexGrow={1} alignItems="center" justifyContent="center" flexDirection="column" gap={1}>
+          <text fg={theme.textSoft}>{`${meta.icon}  ${meta.label} isn't turned on for this account`}</text>
+          <text fg={theme.textMuted} wrapMode="word">{state.error}</text>
+        </box>
+      ) : state.status === "error" ? (
         <box border borderStyle="rounded" borderColor={theme.red} padding={1} flexShrink={0}>
           <text fg={theme.text} wrapMode="word">
             {`Couldn't load ${meta.label.toLowerCase()}: ${state.error}  ·  press r to retry`}

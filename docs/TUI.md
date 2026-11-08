@@ -65,7 +65,10 @@ Bridge to app (response, exactly one per request id):
 
 Error `kind`: `auth` (no or expired login), `not_found` (deleted chat),
 `gateway`, `timeout`, `bad_request` (unknown method or bad params),
-`internal`.
+`internal`. A gateway error whose body carries the server's reason uses its
+`message`, and adds its `code` (for example `email_not_enabled`). The app
+shows a code ending in `_not_enabled` as a feature the account lacks rather
+than a failure to retry.
 
 Bridge to app (event, no id):
 

@@ -96,6 +96,16 @@ describe("App", () => {
     expect(store.get().view).toBe("feed")
   })
 
+  test("a feature the account lacks shows a calm notice, not a retry", async () => {
+    const { setup: s, frame } = await mount(120, 36, { mailOff: true })
+    await frame((x) => x.includes("Message your Muse"))
+    await s.mockInput.typeText("/mail")
+    s.mockInput.pressEnter()
+    const f = await frame((x) => x.includes("isn't turned on for this account"))
+    expect(f).toContain("Muse mail is not enabled")
+    expect(f).not.toContain("press r to retry")
+  })
+
   test("a narrow terminal hides the chat list", async () => {
     const { frame } = await mount(60, 24)
     const f = await frame((x) => x.includes("Message your Muse"))

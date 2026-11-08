@@ -196,6 +196,18 @@ class ErrorKindTest(unittest.TestCase):
         gw.fail = TimeoutError("slow")
         self.assertEqual(self.call(b, "goals")["error"]["kind"], "timeout")
 
+    def test_gateway_error_uses_server_reason(self):
+        b, gw, *_ = make()
+        gw.fail = GatewayError(403, '{"ok":false,"error":{"code":"email_not_enabled",'
+                                    '"message":"Muse mail is not enabled for this account"}}')
+        err = self.call(b, "email")["error"]
+        self.assertEqual(err, {"kind": "gateway", "status": 403, "code": "email_not_enabled",
+                               "message": "Muse mail is not enabled for this account"})
+        gw.fail = GatewayError(500, "boom")
+        err = self.call(b, "feed")["error"]
+        self.assertNotIn("code", err)
+        self.assertIn("boom", err["message"])
+
     def test_internal_reconnects_once(self):
         b, gw, *_ = make()
         connects = []
