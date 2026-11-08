@@ -3,6 +3,7 @@ import { Bridge, BridgeError, type Transport } from "../src/bridge"
 import { Controller, countUnread } from "../src/controller"
 import { ago, cadence, clock, fileName, fuzzyScore, parseDate, plural, truncate, when, zone } from "../src/format"
 import { goalDetail, ideaDetail, sortTasks, taskDetail, taskName } from "../src/components/Panels"
+import { recallList } from "../src/components/Composer"
 import { Store, mergeMessages } from "../src/store"
 import { createFakeTransport } from "./fake"
 
@@ -107,6 +108,25 @@ describe("Controller", () => {
     expect(store.get().phase).toBe("ready")
   })
 
+  test("openUrl hands only web links to the system opener", () => {
+    const ctl = new Controller(new Bridge(createFakeTransport()), new Store())
+    const calls: string[][] = []
+    const real = Bun.spawn
+    ;(Bun as any).spawn = (cmd: string[]) => {
+      calls.push(cmd)
+      return {} as any
+    }
+    try {
+      ctl.openUrl("https://example.com/x")
+      ctl.openUrl("file:///etc/passwd")
+      ctl.openUrl("javascript:alert(1)")
+    } finally {
+      ;(Bun as any).spawn = real
+    }
+    expect(calls.length).toBe(1)
+    expect(calls[0]!.at(-1)).toBe("https://example.com/x")
+  })
+
   test("send shows a pending bubble, streams a draft, then lands the reply once", async () => {
     const store = new Store()
     const ctl = new Controller(new Bridge(createFakeTransport({ streamMs: 5 })), store)
@@ -137,6 +157,10 @@ describe("Controller", () => {
     expect(store.get().awaiting).toBe(true)
     p.push({ event: "message", data: { session_id: null, message: { seq: 2, id: "b", role: "assistant", text: "x", at_ms: 1, final: true, push: true, files: [] } } })
     expect(store.get().awaiting).toBe(true)
+    const card = { id: "bt", kind: "browser_task", title: "Book", subtitle: null, url: null, status: null }
+    p.push({ event: "message", data: { session_id: null, message: { seq: 2.5, id: "w", role: "assistant", text: "", at_ms: 1, final: true, push: false, files: [], card, widget: true } } })
+    expect(store.get().awaiting).toBe(true)
+    expect(store.get().thinkingSince).not.toBeNull()
     p.push({ event: "message", data: { session_id: null, message: { seq: 3, id: "c", role: "assistant", text: "y", at_ms: 1, final: true, push: false, files: [] } } })
     expect(store.get().awaiting).toBe(false)
     expect(store.get().thinkingSince).toBeNull()
@@ -306,6 +330,14 @@ describe("helpers", () => {
       [2, ""],
       [3, "new"],
     ])
+    const w = (seq: number, id: string) => ({ ...m(seq), role: "assistant" as const, widget: true, card: { id, kind: "browser_task", title: "Book", subtitle: null, url: null, status: null } })
+    expect(mergeMessages([w(4, "a"), m(5), w(6, "b")], [w(7, "a")]).map((x) => x.seq)).toEqual([5, 6, 7])
+    expect(mergeMessages([w(7, "a")], [w(4, "a"), m(1)]).map((x) => x.seq)).toEqual([1, 7])
+  })
+
+  test("Up recalls this chat's messages, then what you sent, newest last and once each", () => {
+    expect(recallList(["hi", "", "plan my week", "hi"], ["plan my week", "thanks"])).toEqual(["hi", "plan my week", "thanks"])
+    expect(recallList([], [])).toEqual([])
   })
 
   test("truncate respects display width", () => {

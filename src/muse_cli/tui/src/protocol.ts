@@ -21,6 +21,16 @@ export type FileRef = {
 /** Quick replies the agent offered; `selected` is the one already picked, if any. */
 export type Choice = { id: string; options: string[]; selected: string | null }
 
+/** A link, browser task or other widget the agent showed, drawn as a small card. */
+export type Card = {
+  id: string | null
+  kind: string
+  title: string
+  subtitle: string | null
+  url: string | null
+  status: string | null
+}
+
 export type Message = {
   seq: number
   id: string
@@ -31,6 +41,9 @@ export type Message = {
   push: boolean
   files: FileRef[]
   choices?: Choice[]
+  card?: Card | null
+  /** An image, file or card the agent added after its text, not a reply of its own. */
+  widget?: boolean
 }
 
 export type ConnectionState = "connecting" | "online" | "offline" | "auth_needed"

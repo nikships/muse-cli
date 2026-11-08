@@ -32,6 +32,13 @@ class EventResourcesTest(unittest.TestCase):
         self.assertEqual(res[0]["kind"], "video")
         self.assertEqual(res[0]["byte_len"], 5)
 
+    def test_single_file_entry(self):
+        P = "sandbox://workspace/seats.pdf"
+        ev = {"payload": {"fallback_text": f"[PDF]({P})",
+                          "data": {"file": {"path": P, "mime": "application/pdf", "label": "PDF"}}}}
+        self.assertEqual(event_resources(ev), [{"path": P, "kind": "file", "mime": "application/pdf",
+                                                "label": "PDF"}])
+
     def test_no_files(self):
         self.assertEqual(event_resources({"payload": {"display_text": "hi"}}), [])
 

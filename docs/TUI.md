@@ -93,7 +93,8 @@ so its `Session` opens with `open` as is.
  "final": true, "push": false,
  "files": [{"path": "sandbox://…", "kind": "image", "mime": "image/png",
             "label": "…", "byte_len": 1234}],
- "choices": [{"id": "widget-…", "options": ["Yes", "Not now"], "selected": null}]}
+ "choices": [{"id": "widget-…", "options": ["Yes", "Not now"], "selected": null}],
+ "card": null, "widget": false}
 ```
 
 - `at_ms` is `occurred_at_ms` (fallback `display_text_updated_at_ms`).
@@ -101,7 +102,15 @@ so its `Session` opens with `open` as is.
 - `push` is true for proactive assistant messages (non-empty
   `reply_to_message_id`, same rule as `cli.is_reply`).
 - Only `message.user` and `message.assistant` events with text, files or
-  choices become messages.
+  choices become messages, plus `delta.presentation` events (below).
+- A `delta.presentation` event is something the agent shows after its text:
+  an image or file (`files`, empty `text`), or a link, connector, finished
+  space, browser task or note (`card`: `{"id", "kind", "title", "subtitle",
+  "url", "status"}`). These messages have `widget: true`; they never count as
+  the reply, and the app draws them as part of the assistant message before
+  them. A widget that changes (a browser task finishing) comes back with a new
+  `seq` but the same `card.id`; only the latest is kept. Kinds with nothing
+  to show (`voice_options`) are skipped.
 - `choices` come from `payload.widgets` of kind `option` (quick replies);
   `selected` is `state.data.selectedText`. Their `[hatch_widget:…]` or
   `[[hatch_widget:…]]` placeholder is removed from `text`. The app sends a
@@ -154,7 +163,7 @@ backoff.
 | `task_runs` | `{"job": str?, "limit": 10}` | `{"runs": [...same rows as cmd_task_runs]}` |
 | `email` | `{}` | `{"mailbox", "threads": [...same rows as cmd_email]}` |
 | `email_thread` | `{"id"}` | `{"messages": [...same rows as _email_message]}` |
-| `files` | `{"limit": 200}` | `{"files": [{"seq", "message_id", "path", "kind", "mime", "label", "byte_len"}]}` for the active chat, uploads included |
+| `files` | `{"limit": 200}` | `{"files": [{"seq", "message_id", "path", "kind", "mime", "label", "byte_len"}]}` for the active chat, newest first, uploads and presented files included |
 | `download` | `{"path", "dir"?}` | `{"rows": [...save_resources rows]}`; default dir `~/Downloads/muse` |
 | `ping` | `{}` | `{"pong": true}` |
 | `shutdown` | `{}` | `{}`, then the bridge closes the gateway and exits 0 |

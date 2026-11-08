@@ -31,6 +31,16 @@ def ev(seq, role="assistant", text="hi", status="completed", reply_to="", data=N
     return e
 
 
+def widget(seq, kind, text="", data=None, fallback=None, wid=None):
+    mid = f"widget-msg-{seq}"
+    payload = {"kind": kind, "id": wid or f"w{seq}", "role": "assistant", "message_id": mid,
+               "display_text": text, "fallback_text": text if fallback is None else fallback,
+               "data": data or {}, "state": {"data": {}, "version": 0}}
+    return {"event_name": "delta.presentation", "seq": seq, "message_id": mid, "role": "assistant",
+            "occurred_at_ms": 1794117896000 + seq, "reply_to_message_id": "", "resources": [],
+            "payload": payload}
+
+
 class Clock:
     def __init__(self, t=1000.0):
         self.t = t
@@ -97,7 +107,7 @@ class MessageMappingTest(unittest.TestCase):
                              "push": False,
                              "files": [{"path": "sandbox://workspace/cat.png", "kind": "image",
                                         "mime": "image/png", "label": "cat", "byte_len": 123}],
-                             "choices": []})
+                             "choices": [], "card": None, "widget": False})
 
     def test_option_widget_becomes_choices(self):
         e = ev(10, text="Which one?\n\n[hatch_widget:widget-abc]\n\nTell me.")
@@ -136,6 +146,64 @@ class MessageMappingTest(unittest.TestCase):
     def test_skips_other_events_and_empty_messages(self):
         self.assertIsNone(bridge.to_message({"event_name": "agent.status", "seq": 1}))
         self.assertIsNone(bridge.to_message(ev(9, text="")))
+
+    def test_presented_image_becomes_a_widget_message(self):
+        img = {"path": "sandbox://workspace/imagine_media/sq.webp", "mime": "image/webp",
+               "byte_len": 17394, "label": "blue square", "missing": False}
+        m = bridge.to_message(widget(12, "image", text="blue square",
+                                     data={"fallback_text": f"![blue square]({img['path']})", "images": [img]}))
+        self.assertEqual(m, {"seq": 12, "id": "widget-msg-12", "role": "assistant", "text": "",
+                             "at_ms": 1794117896012, "final": True, "push": False,
+                             "files": [{"path": img["path"], "kind": "image", "mime": "image/webp",
+                                        "label": "blue square", "byte_len": 17394}],
+                             "choices": [], "card": None, "widget": True})
+
+    def test_presented_file_keeps_its_details(self):
+        f = {"path": "sandbox://workspace/seats.pdf", "mime": "application/pdf",
+             "byte_len": 667438, "label": "Seat map PDF"}
+        m = bridge.to_message(widget(13, "file", text="Seat map PDF",
+                                     data={"fallback_text": f"[Seat map PDF]({f['path']})", "file": f}))
+        self.assertEqual(m["files"], [{"path": f["path"], "kind": "file", "mime": "application/pdf",
+                                       "label": "Seat map PDF", "byte_len": 667438}])
+
+    def test_presented_links_and_tasks_become_cards(self):
+        link = bridge.to_message(widget(14, "external_link", text="[Start the survey](https://e.com/s?a=1)",
+                                        data={"url": "https://e.com/s?a=1"}))
+        self.assertEqual(link["card"], {"id": "w14", "kind": "external_link", "title": "Start the survey",
+                                        "subtitle": None, "url": "https://e.com/s?a=1", "status": None})
+        conn = bridge.to_message(widget(15, "internal_link_action_card", text="",
+                                        fallback="[Connect Google Calendar](https://agent.meta.ai/c/gc)",
+                                        data={"title": "Google Calendar", "subtitle": "Connector",
+                                              "data": {"url": "https://agent.meta.ai/c/gc"}}))["card"]
+        self.assertEqual((conn["title"], conn["subtitle"], conn["url"]),
+                         ("Google Calendar", "Connector", "https://agent.meta.ai/c/gc"))
+        space = bridge.to_message(widget(16, "space_build_completed", text="\u2068Our trip\u2069 is ready",
+                                         fallback="[Our trip](https://agent.meta.ai/space/our-trip)",
+                                         data={"summary": "Our trip is ready \u2014 a scrapbook."}))["card"]
+        self.assertEqual((space["title"], space["subtitle"], space["url"]),
+                         ("Our trip is ready", "a scrapbook.", "https://agent.meta.ai/space/our-trip"))
+        task = bridge.to_message(widget(17, "browser_task", text="Book a table",
+                                        data={"title": "Browser", "status": "Completed",
+                                              "display_state": "completed",
+                                              "current_site": {"domain": "example.com"}}))["card"]
+        self.assertEqual((task["title"], task["subtitle"], task["status"], task["url"]),
+                         ("Book a table", "example.com", "completed", None))
+        generic = bridge.to_message(widget(20, "browser_task", text="Task completed",
+                                           data={"activity_title_source": "state", "display_state": "completed",
+                                                 "current_site": {"domain": "e.com", "page_title": "Your trip"}}))
+        self.assertEqual(generic["card"]["title"], "Your trip")
+        bare = bridge.to_message(widget(21, "browser_task", text="Stopped",
+                                        data={"activity_title_source": "state", "display_state": "stopped"}))
+        self.assertEqual((bare["card"]["title"], bare["card"]["status"]), ("Browser task", "stopped"))
+        note = bridge.to_message(widget(18, "html", text="Seat recheck\n\nChecks the map on Thursday.",
+                                        data={"html": "<p>…</p>"}))["card"]
+        self.assertEqual((note["title"], note["subtitle"]), ("Seat recheck", "Checks the map on Thursday."))
+        self.assertIsNone(bridge.to_message(widget(19, "voice_options", text="", data={"options": []})))
+
+    def test_repeated_widget_keeps_only_its_latest_version(self):
+        rows = bridge.to_messages([ev(1), widget(2, "browser_task", text="Book", wid="bt"),
+                                   ev(3), widget(4, "browser_task", text="Book", wid="bt")])
+        self.assertEqual([m["seq"] for m in rows], [1, 3, 4])
 
     def test_sessions_main_first_then_pinned_then_recent(self):
         rows = [bridge.to_session(s) for s in [
@@ -305,6 +373,16 @@ class PollingTest(unittest.TestCase):
         final = [d for n, d in self.events if n == "message"][0]
         self.assertEqual(final["message"]["text"], "Hello world")
 
+    def test_widget_after_reply_is_a_message_not_a_reply(self):
+        self.b.dispatch("send", {"text": "draw it"})
+        self.gw.events += [ev(3, role="user", text="draw it"), ev(4, text="Here it is")]
+        self.advance(1)
+        self.gw.events.append(widget(5, "image", data={"images": [{"path": "sandbox://workspace/a.png"}]}))
+        self.advance(1)
+        msgs = [d["message"] for n, d in self.events if n == "message"]
+        self.assertEqual([(m["seq"], m["widget"]) for m in msgs], [(3, False), (4, False), (5, True)])
+        self.assertEqual(self.b.dispatch("files", {})["files"][0]["path"], "sandbox://workspace/a.png")
+
     def test_draft_seen_at_open_is_reported_when_done(self):
         self.gw.events = [ev(1), ev(2, status=None, text="half")]
         self.b.dispatch("open", {"session_id": None})
@@ -408,12 +486,13 @@ class PollingTest(unittest.TestCase):
         self.gw.events[3]["payload"]["metadata"] = {"attachments": [
             {"path": "workspace/up/me.png", "mime_type": "image/png", "filename": "me.png", "bytes_len": 9}]}
         files = self.b.dispatch("files", {})["files"]
-        self.assertEqual(files, [{"seq": 2, "message_id": "assistant-msg-2",
-                                  "path": "sandbox://workspace/a.mp4", "kind": "video",
-                                  "mime": None, "label": None, "byte_len": None},
-                                 {"seq": 4, "message_id": "assistant-msg-4",
+        # Newest first.
+        self.assertEqual(files, [{"seq": 4, "message_id": "assistant-msg-4",
                                   "path": "sandbox://workspace/up/me.png", "kind": "image",
-                                  "mime": "image/png", "label": "me.png", "byte_len": 9}])
+                                  "mime": "image/png", "label": "me.png", "byte_len": 9},
+                                 {"seq": 2, "message_id": "assistant-msg-2",
+                                  "path": "sandbox://workspace/a.mp4", "kind": "video",
+                                  "mime": None, "label": None, "byte_len": None}])
         self.advance(8)
         # 3 came back in the page above, so only 4 and 5 are new.
         self.assertEqual(self.messages(), [4, 5])

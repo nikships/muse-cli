@@ -76,7 +76,7 @@ export class Controller {
         const i = pending.findIndex((p) => p.text.trim() === m.text.trim())
         if (i >= 0) pending = pending.filter((_, j) => j !== i)
       }
-      const replyLanded = m.role === "assistant" && !m.push
+      const replyLanded = m.role === "assistant" && !m.push && !m.widget
       const draft = s.draft && (s.draft.seq === m.seq || s.draft.id === m.id || replyLanded) ? null : s.draft
       return {
         messages: mergeMessages(s.messages, [m]),
@@ -362,7 +362,7 @@ export class Controller {
       } else if (view === "mail") {
         const m = await this.bridge.request("email", {})
         data = { mailbox: m.mailbox, threads: m.threads }
-      } else if (view === "files") data = (await this.bridge.request("files", { limit: 80 })).files
+      } else if (view === "files") data = (await this.bridge.request("files", { limit: 200 })).files
       this.store.set({ [key]: { status: "ready", data, at: Date.now() } } as any)
     } catch (e) {
       const off = e instanceof BridgeError && !!e.code?.endsWith("_not_enabled")
@@ -406,6 +406,17 @@ export class Controller {
       this.go("chat")
     } catch (e) {
       this.toast(errText(e), "error")
+    }
+  }
+
+  openUrl(url: string) {
+    if (!/^https?:\/\//.test(url)) return
+    const cmd = process.platform === "darwin" ? ["open", url] : process.platform === "win32" ? ["cmd", "/c", "start", "", url] : ["xdg-open", url]
+    try {
+      Bun.spawn(cmd, { stdin: "ignore", stdout: "ignore", stderr: "ignore" })
+      this.toast("Opened in your browser")
+    } catch {
+      this.toast(`Couldn't open a browser: ${url}`, "error")
     }
   }
 

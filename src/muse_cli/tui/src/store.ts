@@ -154,10 +154,14 @@ export function useStore<T>(store: Store, select: (s: State) => T): T {
   return useSyncExternalStore(store.subscribe, () => select(store.get()))
 }
 
-// Insert or replace by seq, keep seq order.
+// Insert or replace by seq, keep seq order. A widget that changes (a browser
+// task finishing) comes back with a new seq but the same card id; keep the latest.
 export function mergeMessages(list: Message[], incoming: Message[]): Message[] {
   if (!incoming.length) return list
   const bySeq = new Map(list.map((m) => [m.seq, m]))
   for (const m of incoming) bySeq.set(m.seq, m)
-  return [...bySeq.values()].sort((a, b) => a.seq - b.seq)
+  const sorted = [...bySeq.values()].sort((a, b) => a.seq - b.seq)
+  const latest = new Map<string, number>()
+  for (const m of sorted) if (m.card?.id) latest.set(m.card.id, m.seq)
+  return latest.size ? sorted.filter((m) => !m.card?.id || latest.get(m.card.id) === m.seq) : sorted
 }

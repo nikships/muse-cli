@@ -1,19 +1,19 @@
 import type { ScrollBoxRenderable } from "@opentui/core"
 import { forwardRef, memo, useEffect, useMemo, useRef, useState } from "react"
 import { useApp, useRenderNode, useS, useSyntaxStyle, useTick } from "../context"
-import { bytes, clock, dayLabel, fileName, truncate } from "../format"
-import type { Choice, FileRef, Message } from "../protocol"
+import { bytes, clock, dayLabel, fileName, host, truncate } from "../format"
+import type { Card, Choice, FileRef, Message } from "../protocol"
 import type { Pending } from "../store"
 import { gradientAt, gradientWave, theme } from "../theme"
 import { GradientText, spinner } from "./common"
 
 const FILE_ICON: Record<string, string> = { image: "▣", video: "▶", audio: "♪", document: "▤", link: "↗" }
 
-function FileChips(props: { files: FileRef[]; end?: boolean }) {
+function FileChips(props: { files: FileRef[]; end?: boolean; flush?: boolean }) {
   const { ctl } = useApp()
   if (!props.files?.length) return null
   return (
-    <box flexDirection="row" flexWrap="wrap" gap={1} paddingLeft={props.end ? 0 : 2} marginTop={props.end ? 0 : 1} justifyContent={props.end ? "flex-end" : "flex-start"}>
+    <box flexDirection="row" flexWrap="wrap" gap={1} paddingLeft={props.end ? 0 : 2} marginTop={props.end || props.flush ? 0 : 1} justifyContent={props.end ? "flex-end" : "flex-start"}>
       {props.files.map((f) => {
         const kind = (f.kind ?? "file").replace(/s$/, "")
         const name = truncate(f.label || fileName(f.path), 36)
@@ -40,6 +40,54 @@ function FileChips(props: { files: FileRef[]; end?: boolean }) {
   )
 }
 
+const CARD_ICON: Record<string, string> = {
+  external_link: "↗",
+  internal_link_action_card: "⚙",
+  space_build_completed: "✦",
+  browser_task: "◎",
+}
+
+const STATUS: Record<string, [string, string]> = {
+  completed: ["✓ done", theme.green],
+  failed: ["✕ failed", theme.red],
+  stopped: ["■ stopped", theme.textMuted],
+}
+
+function WidgetCard(props: { card: Card; flush?: boolean }) {
+  const { ctl } = useApp()
+  const c = props.card
+  const [label, color] = c.status ? (STATUS[c.status] ?? [`● ${c.status}`, theme.yellow]) : ["", theme.textMuted]
+  const where = c.url ? host(c.url) : c.kind === "internal_link_action_card" ? "Finish this in the Muse app" : null
+  return (
+    <box flexDirection="row" paddingLeft={2} marginTop={props.flush ? 0 : 1}>
+      <box
+        border
+        borderStyle="rounded"
+        borderColor={theme.divider}
+        paddingX={1}
+        flexDirection="column"
+        flexShrink={1}
+        onMouseDown={c.url ? () => ctl.openUrl(c.url!) : undefined}
+      >
+        <text selectable={false} wrapMode="word">
+          <span fg={c.kind === "browser_task" ? theme.purple : theme.link}>{`${CARD_ICON[c.kind] ?? "▤"} `}</span>
+          <span fg="#FFFFFF">{c.title}</span>
+          {label ? <span fg={color}>{`  ${label}`}</span> : null}
+        </text>
+        {c.subtitle ? (
+          <text fg={theme.textMuted} wrapMode="word">
+            {truncate(c.subtitle, 240)}
+          </text>
+        ) : null}
+        {where ? (
+          <text fg={c.url ? theme.link : theme.textFaint} selectable={false}>
+            {c.url ? `${where}  ↗` : where}
+          </text>
+        ) : null}
+      </box>
+    </box>
+  )
+}
 function Choices(props: { choices?: Choice[] }) {
   const { ctl } = useApp()
   const [picked, setPicked] = useState<Record<string, string>>({})
@@ -110,27 +158,33 @@ function useTypewriter(target: string, active: boolean): string {
   return shown
 }
 
-export const AssistantMessage = memo(function AssistantMessage(props: { m: Message; streaming?: boolean; id?: string }) {
+// cont: a widget right after another assistant message joins it instead of
+// starting a new "◆ Muse" block.
+export const AssistantMessage = memo(function AssistantMessage(props: { m: Message; streaming?: boolean; id?: string; cont?: boolean }) {
   const style = useSyntaxStyle()
   const renderNode = useRenderNode()
   const { m } = props
   const text = useTypewriter(m.text, !!props.streaming)
   const tick = useTick(80, !!props.streaming)
   return (
-    <box id={props.id} flexDirection="column" marginBottom={1} paddingRight={4}>
-      <box flexDirection="row" height={1}>
-        <GradientText text="◆ Muse" bold phase={props.streaming ? tick / 25 : 0} wave={props.streaming} />
-        <text fg={theme.textFaint} selectable={false}>
-          {`  ${clock(m.at_ms)}`}
-          {m.push ? "  · update" : ""}
-        </text>
-      </box>
+    <box id={props.id} flexDirection="column" marginBottom={1} marginTop={props.cont ? -1 : 0} paddingRight={4}>
+      {props.cont ? null : (
+        <box flexDirection="row" height={1}>
+          <GradientText text="◆ Muse" bold phase={props.streaming ? tick / 25 : 0} wave={props.streaming} />
+          <text fg={theme.textFaint} selectable={false}>
+            {`  ${clock(m.at_ms)}`}
+            {m.push ? "  · update" : ""}
+          </text>
+        </box>
+      )}
       {text ? (
         <box paddingLeft={2}>
           <markdown content={props.streaming ? text + " ▍" : text} syntaxStyle={style} renderNode={renderNode} internalBlockMode="top-level" conceal streaming={!!props.streaming} fg={theme.text} />
         </box>
       ) : null}
-      <FileChips files={m.files} />
+      {/* Under a fresh header with no text, a widget sits right below it. */}
+      <FileChips files={m.files} flush={!text && !props.cont} />
+      {m.card ? <WidgetCard card={m.card} flush={!text && !props.cont && !m.files?.length} /> : null}
       {props.streaming ? null : <Choices choices={m.choices} />}
     </box>
   )
@@ -239,7 +293,7 @@ function Skeleton() {
 
 type Row =
   | { kind: "day"; key: string; label: string }
-  | { kind: "msg"; key: string; m: Message }
+  | { kind: "msg"; key: string; m: Message; cont?: boolean }
   | { kind: "pending"; key: string; p: Pending }
 
 function buildRows(messages: Message[], pending: Pending[]): Row[] {
@@ -254,7 +308,9 @@ function buildRows(messages: Message[], pending: Pending[]): Row[] {
   }
   for (const m of messages) {
     push(m.at_ms)
-    rows.push({ kind: "msg", key: `m${m.seq}`, m })
+    const prev = rows[rows.length - 1]
+    const cont = !!m.widget && m.role === "assistant" && prev?.kind === "msg" && prev.m.role === "assistant"
+    rows.push({ kind: "msg", key: `m${m.seq}`, m, cont })
   }
   for (const p of pending) {
     push(p.at_ms)
@@ -302,7 +358,7 @@ export const Transcript = forwardRef<ScrollBoxRenderable, {}>(function Transcrip
           r.m.role === "user" ? (
             <UserMessage key={r.key} id={`msg-${r.m.seq}`} text={r.m.text} at_ms={r.m.at_ms} files={r.m.files} />
           ) : (
-            <AssistantMessage key={r.key} id={`msg-${r.m.seq}`} m={r.m} />
+            <AssistantMessage key={r.key} id={`msg-${r.m.seq}`} m={r.m} cont={r.cont} />
           )
         ) : (
           <UserMessage

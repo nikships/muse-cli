@@ -431,6 +431,8 @@ def event_resources(ev):
         if isinstance(val, list):
             for item in val:
                 add(item, key.rstrip("s"))
+        elif isinstance(val, dict) and val.get("path"):
+            add(val, key)
     for src in (ev.get("resources"), p.get("resources")):
         for item in src or []:
             add(item, "resource")

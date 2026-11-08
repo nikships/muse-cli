@@ -27,6 +27,14 @@ export function oneLine(s: string): string {
     .trim()
 }
 
+export function host(url: string): string {
+  try {
+    return new URL(url).host.replace(/^www\./, "")
+  } catch {
+    return url
+  }
+}
+
 export function clock(ms: number): string {
   if (!ms) return ""
   const d = new Date(ms)

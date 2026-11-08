@@ -72,9 +72,11 @@ MAIN_CHAT = [
      "- Corner of Elm & 3rd, by the little free library\n"
      "- Bring a book, take a book\n\n"
      "I can also post it to [the community board](https://example.com/book-swap) "
-     "once you're happy with it.", {"images": [{
-         "path": "sandbox://workspace/posters/book-swap.png", "mime": "image/png",
-         "byte_len": len(POSTER), "label": "Book swap poster"}]}),
+     "once you're happy with it."),
+    # Media and cards arrive as their own delta.presentation event after the text.
+    ("widget", "image", "Book swap poster", {"images": [{
+        "path": "sandbox://workspace/posters/book-swap.png", "mime": "image/png",
+        "byte_len": len(POSTER), "label": "Book swap poster", "missing": False}]}),
     ("push", "Heads up: the stone-fruit stall just posted that they close at 11 today, "
      "an hour earlier than usual."),
 ]
@@ -92,6 +94,9 @@ SIDE_CHATS = [
           "Príncipe Real.\n\n"
           "October is ideal: warm days, cool evenings, far fewer queues."),
          ("user", "Where should we stay?"),
+         ("widget", "browser_task", "Compare Chiado guesthouses", {
+             "title": "Browser", "status": "Completed", "display_state": "completed",
+             "current_site": {"domain": "www.booking.com"}, "step_count": 9}),
          ("assistant", "Stay in **Chiado**: central, flat by Lisbon standards, and a short "
           "walk to both Alfama and the river. I shortlisted three guesthouses in your "
           "price range; want the links?"),
@@ -124,6 +129,8 @@ SIDE_CHATS = [
          ("user", "Something like Project Hail Mary, but shorter?"),
          ("assistant", "Try *The Martian* (same author, same humor) or *All Systems Red*, "
           "a 150-page novella about a security robot who just wants to watch TV."),
+         ("widget", "external_link", "[All Systems Red at your library](https://example.com/all-systems-red)",
+          {"url": "https://example.com/all-systems-red"}),
      ]},
 ]
 
@@ -236,9 +243,24 @@ class World:
                 "reply_to_message_id": payload["reply_to_message_id"], "resources": [],
                 "display_text": text, "payload": payload}
 
+    def _widget(self, sid, kind, text, data, at_ms):
+        self.seq += 1
+        mid = f"widget-msg-demo-{self.seq}"
+        payload = {"kind": kind, "id": f"widget-demo-{self.seq}", "role": "assistant",
+                   "message_id": mid, "session_id": sid, "is_thread": sid != MAIN,
+                   "seq": self.seq, "display_text": text, "fallback_text": text,
+                   "display_text_ready": True, "display_text_updated_at_ms": at_ms,
+                   "data": data, "state": {"data": {}, "version": 0}}
+        return {"event_name": "delta.presentation", "seq": self.seq, "message_id": mid,
+                "role": "assistant", "occurred_at_ms": at_ms, "reply_to_message_id": "",
+                "resources": [], "display_text": text, "payload": payload}
+
     def _script(self, sid, messages, start, end):
         evs, step = [], (end - start) // max(1, len(messages) - 1)
         for i, m in enumerate(messages):
+            if m[0] == "widget":
+                evs.append(self._widget(sid, m[1], m[2], m[3], start + i * step))
+                continue
             role, text = m[0], m[1]
             push = role == "push"
             evs.append(self._event(sid, "assistant" if push else role, text, start + i * step,

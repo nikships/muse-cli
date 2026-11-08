@@ -1,6 +1,6 @@
 import type { TextareaRenderable } from "@opentui/core"
-import { useKeyboard } from "@opentui/react"
-import { forwardRef, useImperativeHandle, useMemo, useRef, useState } from "react"
+import { useKeyboard, useTerminalDimensions } from "@opentui/react"
+import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef, useState } from "react"
 import { useApp, useS } from "../context"
 import { fuzzyScore } from "../format"
 import { theme } from "../theme"
@@ -22,6 +22,17 @@ export const SLASH = [
   { cmd: "/quit", args: "", desc: "Leave muse-cli" },
 ]
 
+export function recallList(inChat: string[], sent: string[]): string[] {
+  const out: string[] = []
+  for (const s of [...inChat, ...sent]) {
+    if (!s.trim()) continue
+    const i = out.indexOf(s)
+    if (i >= 0) out.splice(i, 1)
+    out.push(s)
+  }
+  return out.slice(-100)
+}
+
 export type ComposerHandle = { clear(): boolean; insert(text: string): void; isEmpty(): boolean; menuOpen(): boolean }
 
 const KEYS = [
@@ -36,12 +47,14 @@ export const Composer = forwardRef<ComposerHandle, { focused: boolean }>(functio
   const { ctl } = useApp()
   const chat = useS((s) => s.chat)
   const awaiting = useS((s) => s.awaiting)
+  const messages = useS((s) => s.messages)
   const ta = useRef<TextareaRenderable>(null)
   const [text, setText] = useState("")
   const [lines, setLines] = useState(1)
   const [pick, setPick] = useState(0)
   const sent = useRef<string[]>([])
   const recall = useRef(-1)
+  const { width } = useTerminalDimensions()
 
   const slashQuery = /^\/\S*$/.test(text) ? text : null
   const matches = useMemo(() => {
@@ -78,9 +91,19 @@ export const Composer = forwardRef<ComposerHandle, { focused: boolean }>(functio
     const t = ta.current
     if (!t) return
     setText(t.plainText)
-    setLines(Math.max(1, Math.min(8, t.virtualLineCount || t.lineCount || 1)))
+    // virtualLineCount stops at the visible height; the total counts wrapped lines too.
+    setLines(Math.max(1, Math.min(8, t.editorView.getTotalVirtualLineCount() || t.lineCount || 1)))
     setPick(0)
   }
+
+  // Rewrap after a resize (or the chat list opening), once the new width is laid out.
+  useEffect(() => {
+    const id = setTimeout(() => {
+      const t = ta.current
+      if (t) setLines(Math.max(1, Math.min(8, t.editorView.getTotalVirtualLineCount() || t.lineCount || 1)))
+    }, 16)
+    return () => clearTimeout(id)
+  }, [width])
 
   function setValue(v: string) {
     const t = ta.current
@@ -88,6 +111,8 @@ export const Composer = forwardRef<ComposerHandle, { focused: boolean }>(functio
     t.setText(v)
     t.gotoBufferEnd()
     sync()
+    // Wrapped line counts are only right after the next layout pass.
+    setTimeout(sync, 16)
   }
 
   function submit() {
@@ -127,9 +152,10 @@ export const Composer = forwardRef<ComposerHandle, { focused: boolean }>(functio
       return
     }
     // Shell-style recall of what you sent, only from an empty or recalled box.
+    // Your messages already in this chat count too, so a fresh start can recall them.
     const t = ta.current
     if (!t) return
-    const hist = sent.current
+    const hist = recallList(messages.filter((m) => m.role === "user").map((m) => m.text), sent.current)
     if (key.name === "up" && hist.length && (!t.plainText || recall.current >= 0) && t.logicalCursor.row === 0) {
       recall.current = recall.current < 0 ? hist.length - 1 : Math.max(0, recall.current - 1)
       setValue(hist[recall.current]!)

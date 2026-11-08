@@ -80,6 +80,8 @@ def choices(p):
 def to_message(ev):
     """Map one chat.history event to a protocol Message, or None."""
     name = ev.get("event_name")
+    if name == "delta.presentation":
+        return _presentation(ev)
     if name not in ("message.user", "message.assistant"):
         return None
     p = _payload(ev)
@@ -105,7 +107,66 @@ def to_message(ev):
             # An assistant reply still being written has no status yet.
             "final": not assistant or bool(p.get("status")),
             "push": assistant and bool(ev.get("reply_to_message_id") or p.get("reply_to_message_id")),
-            "files": files, "choices": picks}
+            "files": files, "choices": picks, "card": None, "widget": False}
+
+
+_LINK_RE = re.compile(r"\[([^\]]+)\]\((https?://[^)\s]+)\)")
+
+
+def _plain(s):
+    # Display text wraps names in Unicode isolates (U+2068 ... U+2069).
+    return s.replace("\u2068", "").replace("\u2069", "").strip() if isinstance(s, str) else ""
+
+
+def card(p):
+    """A small card for a presentation the web app draws as a widget, or None."""
+    kind = p.get("kind")
+    d = p.get("data") if isinstance(p.get("data"), dict) else {}
+    shown = _plain(p.get("display_text"))
+    link = _LINK_RE.search(shown) or _LINK_RE.search(_plain(p.get("fallback_text")))
+    title, subtitle, url, status = (link.group(1) if link else shown), None, None, None
+    if kind == "external_link":
+        url = d.get("url") if isinstance(d.get("url"), str) else link and link.group(2)
+    elif kind == "internal_link_action_card":
+        title = _plain(d.get("title")) or title
+        subtitle = _plain(d.get("subtitle")) or None
+        inner = d.get("data") if isinstance(d.get("data"), dict) else {}
+        url = inner.get("url") if isinstance(inner.get("url"), str) else None
+    elif kind == "space_build_completed":
+        title = shown or title
+        subtitle = _plain(d.get("summary"))
+        if title and subtitle.startswith(title):
+            subtitle = subtitle[len(title):].lstrip(" \u2014-–:,.")
+        subtitle = subtitle or None
+        url = link and link.group(2)
+    elif kind == "browser_task":
+        site = d.get("current_site") if isinstance(d.get("current_site"), dict) else {}
+        # A "state" title is just the status again ("Task completed"); the page says more.
+        if d.get("activity_title_source") == "state":
+            shown = _plain(site.get("page_title"))
+        title = shown or "Browser task"
+        subtitle = site.get("domain") or None
+        status = d.get("display_state") or (d.get("status") or "").lower() or None
+    else:
+        head, _, rest = shown.partition("\n")
+        title, subtitle = (head.strip(), rest.strip() or None) if head.strip() else (title, None)
+    if not title:
+        return None
+    return {"id": p.get("id"), "kind": kind, "title": title, "subtitle": subtitle,
+            "url": url or None, "status": status}
+
+
+def _presentation(ev):
+    """An image, file, link or other widget the agent added after its text."""
+    p = _payload(ev)
+    files = [{k: r.get(k) for k in FILE_KEYS[2:]} for r in cli.event_resources(ev)]
+    c = None if files else card(p)
+    if not files and not c:
+        return None
+    return {"seq": ev.get("seq"), "id": p.get("message_id") or ev.get("message_id"),
+            "role": "user" if p.get("role") == "user" else "assistant", "text": "",
+            "at_ms": ev.get("occurred_at_ms") or p.get("display_text_updated_at_ms"),
+            "final": True, "push": False, "files": files, "choices": [], "card": c, "widget": True}
 
 
 def server_reason(e):
@@ -129,7 +190,10 @@ def server_reason(e):
 
 
 def to_messages(events):
-    return [m for m in map(to_message, events) if m]
+    rows = [m for m in map(to_message, events) if m]
+    # A widget that changes (a browser task finishing) comes back under its old id.
+    last = {m["card"]["id"]: m["seq"] for m in rows if m["card"] and m["card"]["id"]}
+    return [m for m in rows if not (m["card"] and m["card"]["id"]) or last[m["card"]["id"]] == m["seq"]]
 
 
 def is_main(s):
@@ -701,9 +765,8 @@ class Backend:
         sid = self.need_chat()
         rows = []
         # 200 is as far back as one chat.history call reaches.
-        for ev in self.history_events(sid, _int(p, "limit", 200)):
-            m = to_message(ev)
-            for f in (m or {}).get("files") or []:
+        for m in reversed(to_messages(self.history_events(sid, _int(p, "limit", 200)))):
+            for f in m["files"]:
                 rows.append({"seq": m["seq"], "message_id": m["id"], **f})
         return {"files": [{k: r.get(k) for k in FILE_KEYS} for r in rows]}
 
