@@ -46,6 +46,11 @@ export type FeedUnit = {
   edition?: string
   summary?: string
   reaction?: string | null
+  emoji?: string | null
+  kicker?: string | null
+  category?: string | null
+  source?: string | null
+  why?: string | null
 }
 
 export type Goal = { id: string; title: string; status?: string; subtitle?: string }

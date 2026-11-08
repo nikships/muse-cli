@@ -8,7 +8,7 @@ import { Kbd } from "./components/common"
 import { Composer, type ComposerHandle } from "./components/Composer"
 import { Header } from "./components/Header"
 import { Confirm, Detail, Help, Palette, Prompt, Toasts } from "./components/Overlays"
-import { MAIL_SPLIT, Panel, panelItems, toMarkdown } from "./components/Panels"
+import { MAIL_SPLIT, Panel, feedDetail, feedMeta, goalDetail, ideaDetail, panelItems, runDetail, scheduleLine, taskDetail, taskName } from "./components/Panels"
 import { SIDEBAR_WIDTH, Sidebar } from "./components/Sidebar"
 import { Splash } from "./components/Splash"
 import { Transcript } from "./components/Transcript"
@@ -92,19 +92,22 @@ export function App() {
     if (name === "return" || name === "space") {
       switch (it.kind) {
         case "feed":
-          ctl.showDetail(it.v.title, [it.v.date, it.v.edition].filter(Boolean).join(" · "), async () => it.v.summary || "_No summary._")
+          ctl.showDetail(`${it.v.emoji ? `${it.v.emoji} ` : ""}${it.v.title}`, feedMeta(it.v), async () => feedDetail(it.v))
           return true
         case "goal":
-          ctl.showDetail(it.v.title, it.v.status, async () => toMarkdown(await ctl.bridge.request("goal", { id: it.v.id })) || it.v.subtitle || "")
+          ctl.showDetail(it.v.title, it.v.status, async () => goalDetail(await ctl.bridge.request("goal", { id: it.v.id })) || it.v.subtitle || "")
           return true
         case "idea":
-          ctl.showDetail(it.v.title, `${it.section}  ·  press x in the list to have your Muse do it`, async () => toMarkdown(await ctl.bridge.request("idea", { id: it.v.id })) || it.v.summary || "")
+          ctl.showDetail(it.v.title, `${it.section}  ·  press x in the list to have your Muse do it`, async () => ideaDetail(await ctl.bridge.request("idea", { id: it.v.id })) || it.v.summary || "")
           return true
         case "task":
-          ctl.showDetail(it.v.title, it.v.schedule, async () => toMarkdown(it.v))
+          ctl.showDetail(taskName(it.v), scheduleLine(it.v), async () => {
+            const res = await ctl.bridge.request("task_runs", { job: it.v.id, limit: 10 })
+            return taskDetail(it.v, res.runs ?? [])
+          })
           return true
         case "run":
-          ctl.showDetail(`Run ${it.v.run_id}`, it.v.status, async () => toMarkdown(it.v))
+          ctl.showDetail(it.task || "Task run", it.v.status ?? "", async () => runDetail(it.v))
           return true
         case "thread":
           if (mainWidth - 4 >= MAIL_SPLIT) ctl.openMailThread(it.v.id)

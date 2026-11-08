@@ -143,7 +143,7 @@ backoff.
 | `new_chat` | `{"title": str?}` | `{"chat": Chat}`; also makes it active |
 | `session_op` | `{"op": "rename"\|"pin"\|"unpin"\|"archive"\|"unarchive"\|"delete", "session_id", "title"?}` | server result |
 | `status` | `{}` | `{"vm_id", "sessions", "unread", "identity"}` |
-| `feed` | `{"limit": 50}` | `{"units": [{"id", "title", "date", "edition", "summary", "reaction"}]}` |
+| `feed` | `{"limit": 50}` | `{"units": [{"id", "title", "date", "edition", "summary", "reaction", "emoji", "kicker", "category", "source", "why"}]}` |
 | `feed_react` | `{"unit", "reaction": "like"\|"love"\|"dislike"}` | server result |
 | `goals` | `{}` | `{"goals": [{"id", "title", "status", "subtitle"}]}` |
 | `goal` | `{"id"}` | server result |
@@ -154,7 +154,7 @@ backoff.
 | `task_runs` | `{"job": str?, "limit": 10}` | `{"runs": [...same rows as cmd_task_runs]}` |
 | `email` | `{}` | `{"mailbox", "threads": [...same rows as cmd_email]}` |
 | `email_thread` | `{"id"}` | `{"messages": [...same rows as _email_message]}` |
-| `files` | `{"limit": 40}` | `{"files": [{"seq", "message_id", "path", "kind", "mime", "label", "byte_len"}]}` for the active chat |
+| `files` | `{"limit": 200}` | `{"files": [{"seq", "message_id", "path", "kind", "mime", "label", "byte_len"}]}` for the active chat, uploads included |
 | `download` | `{"path", "dir"?}` | `{"rows": [...save_resources rows]}`; default dir `~/Downloads/muse` |
 | `ping` | `{}` | `{"pong": true}` |
 | `shutdown` | `{}` | `{}`, then the bridge closes the gateway and exits 0 |

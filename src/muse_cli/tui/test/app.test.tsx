@@ -102,8 +102,9 @@ describe("App", () => {
     await s.mockInput.typeText("/mail")
     s.mockInput.pressEnter()
     const f = await frame((x) => x.includes("isn't turned on for this account"))
-    expect(f).toContain("Muse mail is not enabled")
+    expect(f).toContain("doesn't have its own inbox yet")
     expect(f).not.toContain("press r to retry")
+    expect(f).not.toContain("Select a thread")
   })
 
   test("Tab completes a slash command and keeps focus in the message box", async () => {

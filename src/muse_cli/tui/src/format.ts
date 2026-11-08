@@ -85,6 +85,39 @@ export function when(s?: string | null, now = Date.now(), short = false): string
   return short || !time ? name : `${name}, ${time}`
 }
 
+const UNIT: Record<string, string> = { s: "second", m: "minute", h: "hour", d: "day", w: "week" }
+
+function wallClock(hms: string): string {
+  const m = /^(\d{1,2}):(\d{2})/.exec(hms)
+  return m ? clock(new Date(2000, 0, 1, +m[1]!, +m[2]!).getTime()) : ""
+}
+
+// Task schedule keys: "interval@6h", "daily@08:39:00", "runonce@2026-10-15T10:00:00".
+export function cadence(key?: string | null, now = Date.now()): string {
+  if (!key) return ""
+  const at = key.indexOf("@")
+  const kind = at < 0 ? key : key.slice(0, at)
+  const arg = at < 0 ? "" : key.slice(at + 1)
+  if (kind === "interval") {
+    const m = /^(\d+)([smhdw])$/.exec(arg)
+    if (m && UNIT[m[2]!]) return +m[1]! === 1 ? `Every ${UNIT[m[2]!]}` : `Every ${m[1]} ${UNIT[m[2]!]}s`
+  }
+  if (kind === "daily" && wallClock(arg)) return `Daily at ${wallClock(arg)}`
+  if (kind === "runonce") {
+    const d = when(arg, now)
+    return d && d !== arg ? `Once, ${d}` : "Once"
+  }
+  return key
+}
+
+// "New York time" when a task runs on another clock than this machine's.
+export function zone(tz?: string | null): string {
+  if (!tz || tz === "UTC") return ""
+  const local = Intl.DateTimeFormat().resolvedOptions().timeZone
+  if (tz === local) return ""
+  return `${(tz.split("/").pop() ?? tz).replace(/_/g, " ")} time`
+}
+
 export function plural(n: number, word: string): string {
   return `${n} ${word}${n === 1 ? "" : "s"}`
 }

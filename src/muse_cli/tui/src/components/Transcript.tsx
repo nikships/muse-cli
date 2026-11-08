@@ -190,7 +190,7 @@ function DaySep(props: { label: string }) {
 
 const SUGGESTIONS = [
   "What's on my plate today?",
-  "Summarize my unread Muse Mail",
+  "What did I miss while I was away?",
   "Help me plan the week ahead",
   "Give me three ideas for this weekend",
 ]

@@ -117,11 +117,11 @@ export function createFakeTransport(opts: FakeOptions = {}): Transport & { sent:
       case "goals":
         return { goals: [{ id: "g1", title: "Run a half marathon", status: "in_progress", subtitle: "12 of 16 weeks done" }] }
       case "goal":
-        return { title: "Run a half marathon", description: "Training plan", milestones: [{ title: "10k", status: "done" }] }
+        return { goal: { title: "Run a half marathon", status: "active", momentum_status: "on_track", description: "Training plan" }, updates: [{ title: "Ran a 10k", effective_at: "2026-11-01T09:00:00Z" }] }
       case "ideas":
         return { ideas: [{ id: "i1", title: "Plan a picnic", section: "This weekend", summary: "Sunny Saturday" }] }
       case "idea":
-        return { title: "Plan a picnic", body: "Find a park and pack food." }
+        return { card: { title: "Plan a picnic", summary: "Find a park and pack food.", primaryLabel: "This weekend", content: { buildSummary: "Checks the weather first." } } }
       case "idea_exec":
         return { ok: true }
       case "tasks":

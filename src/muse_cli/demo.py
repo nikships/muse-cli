@@ -315,13 +315,21 @@ class World:
             (yday, "morning", "Money", "You're under budget on dining out",
              "€64 left for the month, enough for the ramen lunch and one more dinner."),
         ]
+        extra = {  # kicker: (emoji, category, connector_attribution)
+            "Weather": ("☀️", "Today", None), "Calendar": ("📅", "Today", "Google Calendar"),
+            "Running": ("🏃", "Health", "Strava"), "Reading": ("📚", "For you", None),
+            "Kitchen": ("🍞", "Projects", None), "Travel": ("✈️", "Travel", "Gmail"),
+            "Neighborhood": ("🏘", "Local", None), "Money": ("💶", "Money", None)}
         days = {}
         for i, (date, kind, kicker, title, body) in enumerate(items):
             day = days.setdefault(date, {"local_date": date, "editions": {}})
             ed = day["editions"].setdefault(kind, {"kind": kind, "title": kind.title(), "units": []})
+            emoji, category, source = extra[kicker]
             ed["units"].append({"unit_id": f"demo-unit-{i + 1}", "kicker": kicker, "title": title,
                                 "body_md": body, "edition_kind": kind, "position": len(ed["units"]),
-                                "reaction": "love" if i == 1 else None})
+                                "reaction": "love" if i == 1 else None, "emoji": emoji,
+                                "category": category, "connector_attribution": source,
+                                "why_did_i_see_this": f"You asked your Muse to keep an eye on {kicker.lower()}."})
         return {"days": [{"local_date": d["local_date"], "editions": list(d["editions"].values())}
                          for d in days.values()]}
 
@@ -419,10 +427,22 @@ class World:
         return {"goals": copy.deepcopy(self.GOALS)}
 
     def api_goals_get(self, pp, b):
+        day = datetime.timedelta(days=1)
+        iso = lambda t: t.strftime("%Y-%m-%dT%H:%M:%SZ")
+        now = datetime.datetime.fromtimestamp(self.wall(), datetime.timezone.utc)
         for g in self.GOALS:
             if g["goal_id"] == pp.get("id"):
-                return {**g, "description": f"{g['title']}. {g['summary']}.",
-                        "milestones": ["Set the target", "Build the habit", "Finish strong"]}
+                # Same shape as the real goals.get.
+                return {"goal": {**g, "description": f"{g['title']}. {g['summary']}.",
+                                 "momentum_status": {"rising": "ahead", "steady": "on_track"}.get(g["momentum"], ""),
+                                 "created_at": iso(now - 60 * day), "last_activity_at": iso(now - day)},
+                        "updates": [
+                            {"title": "Checked in on progress", "summary": g["summary"],
+                             "effective_at": iso(now - day)},
+                            {"title": "Set the target", "summary": "Picked a plan and a weekly rhythm.",
+                             "effective_at": iso(now - 60 * day)}],
+                        "associations": [
+                            {"association_type": "cron", "details": {"title": "Weekly check-in"}}]}
         raise GatewayError(404, '{"error":"goal not found"}')
 
     IDEAS = [
@@ -456,7 +476,13 @@ class World:
         raise GatewayError(404, '{"error":"idea not found"}')
 
     def api_api_idea_cards_detail(self, pp, b):
-        return self._idea(pp.get("ideaCardId"))
+        i = self._idea(pp.get("ideaCardId"))
+        # Same shape as the real api.idea-cards.detail.
+        return {"card": {"id": i["id"], "ideaCardId": i["id"], "title": i["title"],
+                         "summary": i["summary"], "primaryLabel": i["section"], "actionLabel": "Do it",
+                         "content": {"title": i["title"], "summary": i["summary"],
+                                     "buildSummary": "Works it out in your main chat, then checks in."},
+                         "items": []}}
 
     def api_api_idea_cards_execute(self, pp, b):
         idea = self._idea(pp.get("ideaCardId"))
@@ -478,29 +504,34 @@ class World:
         return int((t + datetime.timedelta(days=days)).timestamp())
 
     def api_tasks_list(self, pp, b):
+        # Schedule keys in the server's own shapes.
+        flights = datetime.datetime.fromtimestamp(self._at(18, 0, days=2))
         return {"schedules": [
-            {"id": "demo-task-1", "title": "Morning briefing", "mode": "recurring", "enabled": True,
-             "schedule_key": "daily 07:30", "next_run_at_utc": self._at(7, 30)},
-            {"id": "demo-task-2", "title": "Water the plants", "mode": "recurring", "enabled": True,
-             "schedule_key": "weekly sun 10:00", "next_run_at_utc": self._at(10, 0, weekday=6)},
-            {"id": "demo-task-3", "title": "Remind me to book the Lisbon flights", "mode": "once",
-             "enabled": False, "schedule_key": "once", "next_run_at_utc": self._at(18, 0, days=2)},
+            {"id": "demo-task-1", "title": "Morning briefing", "mode": "task", "enabled": True,
+             "schedule_key": "daily@07:30:00", "next_run_at_utc": self._at(7, 30)},
+            {"id": "demo-task-2", "title": "Water the plants", "mode": "task", "enabled": True,
+             "schedule_key": "interval@3d", "next_run_at_utc": self._at(10, 0, days=1, after=False)},
+            {"id": "demo-task-3", "title": "Remind me to book the Lisbon flights", "mode": "task",
+             "enabled": True, "schedule_key": f"runonce@{flights:%Y-%m-%dT%H:%M:%S}",
+             "next_run_at_utc": self._at(18, 0, days=2)},
+            {"id": "demo-task-4", "title": "Check concert presales", "mode": "task", "enabled": False,
+             "schedule_key": "daily@10:00:00", "next_run_at_utc": None},
         ], "invalid": []}
 
     def api_tasks_runs(self, pp, b):
         brief = self._at(7, 30, after=False)
         runs = [
             {"run_id": "demo-run-4", "job_id": "demo-task-1", "status": "succeeded",
-             "trigger_reason": "schedule", "scheduled_for_utc": brief,
+             "trigger_reason": "scheduled", "scheduled_for_utc": brief,
              "result_summary": "Sent your briefing: 3 events, sunny, 2 emails worth reading."},
             {"run_id": "demo-run-3", "job_id": "demo-task-2", "status": "succeeded",
-             "trigger_reason": "schedule", "scheduled_for_utc": self._at(10, 0, weekday=6, after=False),
+             "trigger_reason": "scheduled", "scheduled_for_utc": self._at(10, 0, days=-2, after=False),
              "result_summary": "Reminded you to water the plants."},
             {"run_id": "demo-run-2", "job_id": "demo-task-1", "status": "succeeded",
-             "trigger_reason": "schedule", "scheduled_for_utc": brief - 86400,
+             "trigger_reason": "scheduled", "scheduled_for_utc": brief - 86400,
              "result_summary": "Sent your briefing: a quiet day ahead."},
             {"run_id": "demo-run-1", "job_id": "demo-task-1", "status": "failed",
-             "trigger_reason": "schedule", "scheduled_for_utc": brief - 2 * 86400,
+             "trigger_reason": "scheduled", "scheduled_for_utc": brief - 2 * 86400,
              "error_text": "Calendar was briefly unavailable; retried at 07:35."},
         ]
         if b.get("job_id"):

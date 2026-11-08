@@ -1,7 +1,7 @@
 import { TextAttributes, type ScrollBoxRenderable } from "@opentui/core"
 import { useEffect, useMemo, useRef, type ReactNode } from "react"
 import { useApp, useS, useSyntaxStyle, useTick } from "../context"
-import { bytes, fileName, oneLine, plural, truncate, when } from "../format"
+import { bytes, cadence, fileName, oneLine, parseDate, plural, truncate, when, zone } from "../format"
 import type { ChatFile, FeedUnit, Goal, Idea, MailThread, Task, TaskRun } from "../protocol"
 import { VIEWS, type State, type View } from "../store"
 import { gradientAt, theme } from "../theme"
@@ -12,7 +12,7 @@ export type PanelItem =
   | { kind: "goal"; v: Goal }
   | { kind: "idea"; v: Idea; section: string; first: boolean }
   | { kind: "task"; v: Task }
-  | { kind: "run"; v: TaskRun; first: boolean }
+  | { kind: "run"; v: TaskRun; first: boolean; task: string }
   | { kind: "thread"; v: MailThread }
   | { kind: "file"; v: ChatFile }
 
@@ -32,11 +32,14 @@ export function panelItems(s: State, view: View): PanelItem[] {
       }
       return out
     }
-    case "tasks":
+    case "tasks": {
+      const tasks = sortTasks(s.tasks.data?.tasks ?? [])
+      const names = new Map(tasks.map((t) => [t.id, taskName(t)]))
       return [
-        ...(s.tasks.data?.tasks ?? []).map((v) => ({ kind: "task" as const, v })),
-        ...(s.tasks.data?.runs ?? []).map((v, i) => ({ kind: "run" as const, v, first: i === 0 })),
+        ...tasks.map((v) => ({ kind: "task" as const, v })),
+        ...(s.tasks.data?.runs ?? []).map((v, i) => ({ kind: "run" as const, v, first: i === 0, task: names.get(v.job_id) ?? "" })),
       ]
+    }
     case "mail":
       return (s.mail.data?.threads ?? []).map((v) => ({ kind: "thread", v }))
     case "files":
@@ -44,6 +47,56 @@ export function panelItems(s: State, view: View): PanelItem[] {
     default:
       return []
   }
+}
+
+export function taskName(t: Task): string {
+  return t.title || (t.mode === "heartbeat" ? "Heartbeat check-in" : "Untitled task")
+}
+
+// Running tasks first, soonest next; then paused ones in server order.
+export function sortTasks(tasks: Task[]): Task[] {
+  const next = (t: Task) => (t.enabled === false ? Infinity : parseDate(t.next_run) ?? Number.MAX_SAFE_INTEGER)
+  return tasks
+    .map((t, i) => ({ t, i }))
+    .sort((a, b) => next(a.t) - next(b.t) || a.i - b.i)
+    .map((x) => x.t)
+}
+
+function taskState(t: Task, now = Date.now()): string {
+  if (t.enabled !== false) return t.next_run ? `Next: ${when(t.next_run, now)}` : "on"
+  const once = t.schedule?.startsWith("runonce@") ? parseDate(t.schedule.slice(8)) : null
+  return once !== null && once < now ? "done" : "paused"
+}
+
+// Run summaries are free text, except the odd raw JSON result.
+const OK = new Set(["succeeded", "completed", "success", "ok"])
+
+export function scheduleLine(t: Task): string {
+  const tz = t.schedule?.startsWith("interval@") ? "" : zone(t.timezone)
+  return [cadence(t.schedule), tz && `(${tz})`].filter(Boolean).join(" ")
+}
+
+export function taskDetail(t: Task, runs: TaskRun[]): string {
+  const rows = [`**Schedule** · ${scheduleLine(t) || "not set"}`, `**Status** · ${taskState(t)}`]
+  if (t.mode && t.mode !== "task") rows.push(`**Kind** · ${t.mode}`)
+  const list = runs.map((r) => {
+    const note = runNote(r)
+    const status = OK.has(r.status ?? "") ? "" : ` · ${r.status}`
+    return `- **${when(r.scheduled)}**${status}${note ? ` · ${note}` : ""}`
+  })
+  return [rows.join("\n\n"), "### Recent runs", list.length ? list.join("\n") : "_No runs yet._"].join("\n\n")
+}
+
+export function runDetail(r: TaskRun): string {
+  const rows = [`**When** · ${when(r.scheduled) || "unknown"}`, `**Status** · ${r.status ?? "unknown"}`]
+  if (r.trigger) rows.push(`**Trigger** · ${r.trigger.replace(/_/g, " ")}`)
+  const body = r.error ? `**Error**\n\n${r.error}` : r.summary ? r.summary : "_No summary._"
+  return [rows.join("\n\n"), body].join("\n\n")
+}
+
+function runNote(r: TaskRun): string {
+  const s = oneLine(r.error || r.summary || "")
+  return /^[[{]/.test(s) ? "" : s
 }
 
 // Panel width from which Mail shows the open thread beside the list.
@@ -56,6 +109,10 @@ export const PANEL_HINTS: Record<Exclude<View, "chat">, string> = {
   tasks: "↑↓ move  ↵ details  r refresh",
   mail: "↑↓ move  ↵ open thread  esc close  r refresh",
   files: "↑↓ move  ↵ download to ~/Downloads/muse  r refresh",
+}
+
+const OFF_HINT: Partial<Record<Exclude<View, "chat">, string>> = {
+  mail: "Your Muse doesn't have its own inbox yet.",
 }
 
 const EMPTY: Record<Exclude<View, "chat">, string> = {
@@ -108,7 +165,7 @@ function Row(props: { item: PanelItem; i: number; selected: boolean; width: numb
       return (
         <Card id={id} selected={selected} onClick={select}>
           <text fg="#FFFFFF" attributes={TextAttributes.BOLD} wrapMode="word">
-            {u.title || "Untitled"}
+            {`${u.emoji ? `${u.emoji} ` : ""}${u.title || "Untitled"}`}
           </text>
           {u.summary ? (
             <text fg={theme.textSoft} wrapMode="word">
@@ -116,7 +173,7 @@ function Row(props: { item: PanelItem; i: number; selected: boolean; width: numb
             </text>
           ) : null}
           <box flexDirection="row">
-            <text fg={theme.textFaint}>{[when(u.date), u.edition].filter(Boolean).join(" · ")}</text>
+            <text fg={theme.textFaint}>{feedMeta(u)}</text>
             <box flexGrow={1} />
             <text fg={u.reaction === "love" ? theme.pink : theme.link}>{r}</text>
           </box>
@@ -170,13 +227,17 @@ function Row(props: { item: PanelItem; i: number; selected: boolean; width: numb
           <Card id={id} selected={selected} onClick={select}>
             <box flexDirection="row">
               <text fg={t.enabled === false ? theme.textFaint : theme.green}>{t.enabled === false ? "○ " : "● "}</text>
-              <text fg="#FFFFFF" attributes={TextAttributes.BOLD} flexShrink={1}>
-                {t.title}
+              <text fg={t.enabled === false ? theme.textSoft : "#FFFFFF"} attributes={TextAttributes.BOLD} flexShrink={1}>
+                {taskName(t)}
               </text>
               <box flexGrow={1} />
-              <text fg={theme.textMuted}>{t.next_run && t.enabled !== false ? `Next: ${when(t.next_run)}` : "paused"}</text>
+              <text fg={theme.textMuted}>{taskState(t)}</text>
             </box>
-            <text fg={theme.textFaint}>{[...new Set([t.schedule, t.mode, t.timezone].filter(Boolean))].join(" · ")}</text>
+            <text fg={theme.textFaint}>
+              {[cadence(t.schedule), t.schedule?.startsWith("interval@") ? "" : zone(t.timezone), t.mode === "task" || t.mode === "heartbeat" ? "" : t.mode]
+                .filter(Boolean)
+                .join(" · ")}
+            </text>
           </Card>
         </box>
       )
@@ -187,9 +248,12 @@ function Row(props: { item: PanelItem; i: number; selected: boolean; width: numb
         <box flexDirection="column" flexShrink={0}>
           {item.first ? <SectionTitle text="Recent runs" /> : null}
           <box id={id} flexDirection="row" height={1} backgroundColor={selected ? theme.card : undefined} onMouseDown={select} paddingX={1}>
-            <text fg={statusColor(r.status)}>{`● ${(r.status ?? "?").padEnd(10)}`}</text>
-            <text fg={theme.textMuted}>{`${when(r.scheduled).padEnd(20)}`}</text>
-            <text fg={r.error ? theme.red : theme.textSoft}>{truncate(oneLine(r.error || r.summary || r.trigger || ""), w - 30)}</text>
+            <text fg={statusColor(r.status)} flexShrink={0}>{"● "}</text>
+            <text fg={theme.textMuted} flexShrink={0}>{`${when(r.scheduled).padEnd(18)}`}</text>
+            <text fg={theme.text} flexShrink={0}>{truncate(item.task || "Task", Math.min(30, Math.floor(w / 3))).padEnd(Math.min(30, Math.floor(w / 3)) + 2)}</text>
+            <text fg={r.error ? theme.red : theme.textFaint}>
+              {truncate([OK.has(r.status ?? "") ? "" : r.status, runNote(r)].filter(Boolean).join(" · "), Math.max(10, w - 26 - Math.min(30, Math.floor(w / 3))))}
+            </text>
           </box>
         </box>
       )
@@ -296,7 +360,7 @@ export function Panel(props: { view: Exclude<View, "chat">; width: number }) {
       {state.status === "error" && state.off ? (
         <box flexGrow={1} alignItems="center" justifyContent="center" flexDirection="column" gap={1}>
           <text fg={theme.textSoft}>{`${meta.icon}  ${meta.label} isn't turned on for this account`}</text>
-          <text fg={theme.textMuted} wrapMode="word">{state.error}</text>
+          <text fg={theme.textMuted} wrapMode="word">{OFF_HINT[view] ?? state.error}</text>
         </box>
       ) : state.status === "error" ? (
         <box border borderStyle="rounded" borderColor={theme.red} padding={1} flexShrink={0}>
@@ -313,7 +377,7 @@ export function Panel(props: { view: Exclude<View, "chat">; width: number }) {
           <text fg={theme.textMuted}>{EMPTY[view]}</text>
         </box>
       ) : null}
-      <box flexDirection="row" flexGrow={1} gap={2} minHeight={0}>
+      <box flexDirection="row" flexGrow={state.off ? 0 : 1} gap={2} minHeight={0} visible={!state.off}>
         <scrollbox ref={scroll} width={split ? listWidth : undefined} flexGrow={split ? 0 : 1} flexBasis={split ? undefined : 0} minHeight={0} contentOptions={{ gap: 0 }}>
           {items.map((it, i) => (
             <Row key={`${it.kind}-${(it.v as any).id ?? (it.v as any).run_id ?? (it.v as any).path ?? i}`} item={it} i={i} selected={i === index} width={listWidth} />
@@ -335,6 +399,71 @@ export function Panel(props: { view: Exclude<View, "chat">; width: number }) {
 }
 
 // A readable markdown rendering of an arbitrary server object.
+export function feedMeta(u: FeedUnit): string {
+  return [when(u.date, Date.now(), true), u.edition, u.category, u.source && `via ${u.source}`].filter(Boolean).join(" · ")
+}
+
+export function feedDetail(u: FeedUnit): string {
+  return join([u.kicker && `_${u.kicker}_`, u.summary || "_No summary._", u.why && `**Why you're seeing this** · ${oneLine(u.why)}`])
+}
+
+const words = (s?: string | null) => (s ? s.replace(/_/g, " ") : "")
+const line = (label: string, v?: string | null) => (v ? `**${label}** · ${v}` : "")
+const join = (parts: (string | false | null | undefined)[]) => parts.filter(Boolean).join("\n\n")
+
+// goals.get answers {goal, updates, associations, briefings}; anything else falls back to a dump.
+export function goalDetail(d: any): string {
+  const g = d?.goal
+  if (!g || typeof g !== "object") return toMarkdown(d)
+  const updates = (Array.isArray(d.updates) ? d.updates : []).slice(0, 8).map((u: any) => {
+    const date = when(u.effective_at || u.created_at, Date.now(), true)
+    const text = oneLine(u.summary || u.description || "")
+    return `- ${date ? `**${date}** · ` : ""}${u.title || ""}${text && text !== u.title ? ` — ${text}` : ""}`
+  })
+  const links = (Array.isArray(d.associations) ? d.associations : [])
+    .map((a: any) => {
+      let title: string = a?.details?.title || ""
+      // A task link's title can be its file name ("…@2026-10-23T10:39:00.md"); its id reads better.
+      if ((/\.md$|@\d{4}-/.test(title) || !title) && a?.details?.id) {
+        const id = String(a.details.id).replace(/[-_]+/g, " ").trim()
+        title = id.charAt(0).toUpperCase() + id.slice(1)
+      }
+      if (!title) return ""
+      const kind = a.association_type === "cron" ? "Task" : a.association_type === "space" ? "Space" : words(a.association_type)
+      return `- ${kind ? `${kind[0]!.toUpperCase()}${kind.slice(1)}: ` : ""}${title}`
+    })
+    .filter(Boolean)
+  return join([
+    [line("Status", [words(g.status), words(g.momentum_status || g.momentum)].filter(Boolean).join(" · ")), line("Last activity", when(g.last_activity_at || g.updated_at, Date.now(), true)), line("Started", when(g.created_at, Date.now(), true))].filter(Boolean).join("\n"),
+    g.summary && `_${oneLine(g.summary)}_`,
+    g.description && g.description !== g.summary && g.description,
+    updates.length > 0 && `### Updates\n\n${updates.join("\n")}`,
+    links.length > 0 && `### Linked\n\n${links.join("\n")}`,
+  ])
+}
+
+// api.idea-cards.detail answers {card: {...}}.
+export function ideaDetail(d: any): string {
+  const c = d?.card
+  if (!c || typeof c !== "object") return toMarkdown(d)
+  const content = c.content ?? {}
+  const items = (Array.isArray(c.items) ? c.items : [])
+    .map((x: any) => {
+      const t = x?.content?.title || x?.title
+      const s = oneLine(x?.content?.summary || x?.summary || "")
+      return t ? `- **${t}**${s ? ` — ${s}` : ""}` : ""
+    })
+    .filter(Boolean)
+  const badge = c.presentation?.display_badge?.text
+  return join([
+    [c.primaryLabel, badge].filter(Boolean).join(" · ") && `_${[c.primaryLabel, badge].filter(Boolean).join(" · ")}_`,
+    c.summary || content.summary,
+    line("What your Muse would do", content.buildSummary),
+    line("Before it can", c.prerequisiteNotes),
+    items.length > 0 && `### Includes\n\n${items.join("\n")}`,
+  ])
+}
+
 export function toMarkdown(o: any, depth = 0): string {
   if (o == null) return ""
   if (typeof o !== "object") return String(o)

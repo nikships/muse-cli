@@ -1,7 +1,8 @@
 import { describe, expect, test } from "bun:test"
 import { Bridge, BridgeError, type Transport } from "../src/bridge"
 import { Controller, countUnread } from "../src/controller"
-import { ago, clock, fileName, fuzzyScore, parseDate, plural, truncate, when } from "../src/format"
+import { ago, cadence, clock, fileName, fuzzyScore, parseDate, plural, truncate, when, zone } from "../src/format"
+import { goalDetail, ideaDetail, sortTasks, taskDetail, taskName } from "../src/components/Panels"
 import { Store, mergeMessages } from "../src/store"
 import { createFakeTransport } from "./fake"
 
@@ -220,6 +221,53 @@ describe("helpers", () => {
     expect(plural(3, "message")).toBe("3 messages")
     expect(fileName("sandbox://workspace/100%25%20done.png")).toBe("100% done.png")
     expect(fileName("sandbox://workspace/100% done.png")).toBe("100% done.png")
+  })
+
+  test("task schedules read like a person wrote them", () => {
+    const now = new Date(2026, 10, 8, 14, 0).getTime()
+    expect(cadence("interval@6h")).toBe("Every 6 hours")
+    expect(cadence("interval@1d")).toBe("Every day")
+    expect(cadence("interval@15m")).toBe("Every 15 minutes")
+    expect(cadence("daily@08:39:00")).toBe(`Daily at ${clock(new Date(2026, 0, 1, 8, 39).getTime())}`)
+    expect(cadence("runonce@2026-11-09T09:00:00", now)).toBe(`Once, Tomorrow, ${clock(new Date(2026, 10, 9, 9, 0).getTime())}`)
+    expect(cadence("weekly@sun")).toBe("weekly@sun")
+    expect(zone("UTC")).toBe("")
+    expect(zone(Intl.DateTimeFormat().resolvedOptions().timeZone)).toBe("")
+    expect(zone("Antarctica/South_Pole")).toBe("South Pole time")
+  })
+
+  test("tasks sort by next run, paused last, and get a name", () => {
+    const t = (id: string, enabled: boolean, next_run: string | null) => ({ id, title: id, enabled, next_run, schedule: "interval@1h" })
+    const sorted = sortTasks([t("off", false, null), t("later", true, "2026-11-09 09:00"), t("soon", true, "2026-11-08 15:00")])
+    expect(sorted.map((x) => x.id)).toEqual(["soon", "later", "off"])
+    expect(taskName({ id: "heartbeat", title: "", mode: "heartbeat" })).toBe("Heartbeat check-in")
+    const md = taskDetail({ id: "x", title: "x", enabled: false, schedule: "runonce@2020-01-01T09:00:00" }, [
+      { run_id: "r", job_id: "x", status: "succeeded", scheduled: "2020-01-01 09:00", summary: '{"results":[]}' },
+    ])
+    expect(md).toContain("**Status** · done")
+    expect(md).not.toContain("results")
+  })
+
+  test("goal and idea details read as prose, not field dumps", () => {
+    const g = goalDetail({
+      goal: { goal_id: "g1", slug: "run", title: "Run", status: "active", momentum_status: "on_track", summary: "Week 6", sort_order: 0 },
+      updates: [{ update_id: "u1", title: "Ran a 10k", summary: "Felt good", effective_at: "2026-11-01T09:00:00Z" }],
+      associations: [
+        { association_type: "cron", details: { title: "Long run reminder" } },
+        { association_type: "cron", details: { id: "tempo-run-check", title: "tempo-run-check__daily@2026-10-23T10:39:00.md" } },
+      ],
+    })
+    expect(g).toContain("- Task: Tempo run check")
+    expect(g).toContain("**Status** · active · on track")
+    expect(g).toContain("Ran a 10k — Felt good")
+    expect(g).toContain("- Task: Long run reminder")
+    expect(g).not.toMatch(/slug|sort|goal_id|g1/)
+    const i = ideaDetail({ card: { ideaCardId: "i1", title: "Picnic", summary: "Find a park", primaryLabel: "Fun", buildStatus: "not_started", content: { buildSummary: "Checks the weather" }, items: [{ content: { title: "Weather", summary: "Sunny?" } }] } })
+    expect(i).toContain("_Fun_")
+    expect(i).toContain("**What your Muse would do** · Checks the weather")
+    expect(i).toContain("- **Weather** — Sunny?")
+    expect(i).not.toMatch(/not_started|i1/)
+    expect(goalDetail({ title: "flat" })).toContain("flat")
   })
 
   test("mergeMessages dedupes by seq and keeps order", () => {

@@ -405,10 +405,15 @@ class PollingTest(unittest.TestCase):
         self.gw.events[1]["payload"]["data"] = {"videos": [{"path": "sandbox://workspace/a.mp4"}]}
         page = self.b.dispatch("history", {"limit": 2, "before_seq": 4})
         self.assertEqual([m["seq"] for m in page["messages"]], [2, 3])
+        self.gw.events[3]["payload"]["metadata"] = {"attachments": [
+            {"path": "workspace/up/me.png", "mime_type": "image/png", "filename": "me.png", "bytes_len": 9}]}
         files = self.b.dispatch("files", {})["files"]
         self.assertEqual(files, [{"seq": 2, "message_id": "assistant-msg-2",
                                   "path": "sandbox://workspace/a.mp4", "kind": "video",
-                                  "mime": None, "label": None, "byte_len": None}])
+                                  "mime": None, "label": None, "byte_len": None},
+                                 {"seq": 4, "message_id": "assistant-msg-4",
+                                  "path": "sandbox://workspace/up/me.png", "kind": "image",
+                                  "mime": "image/png", "label": "me.png", "byte_len": 9}])
         self.advance(8)
         # 3 came back in the page above, so only 4 and 5 are new.
         self.assertEqual(self.messages(), [4, 5])
@@ -525,13 +530,17 @@ class DemoBridgeTest(unittest.TestCase):
         self.call("session_op", op="delete", session_id="demo-books")
         self.assertEqual(len(self.call("sessions")["sessions"]), 6)
         self.assertEqual(len(self.call("feed")["units"]), 8)
-        self.assertTrue(all(u["summary"] for u in self.call("feed")["units"]))
+        units = self.call("feed")["units"]
+        self.assertTrue(all(u["summary"] and u["emoji"] and u["why"] for u in units))
+        self.assertEqual(units[1]["source"], "Google Calendar")
         self.call("feed_react", unit="demo-unit-3", reaction="like")
         self.assertEqual(self.call("feed")["units"][2]["reaction"], "like")
         self.assertEqual(len(self.call("goals")["goals"]), 4)
         ideas = self.call("ideas")["ideas"]
         self.assertEqual((len(ideas), len({i["section"] for i in ideas})), (6, 2))
-        self.assertEqual(len(self.call("tasks")["tasks"]), 3)
+        tasks = self.call("tasks")["tasks"]
+        self.assertEqual(len(tasks), 4)
+        self.assertEqual(tasks[0]["schedule"], "daily@07:30:00")
         self.assertTrue(self.call("task_runs")["runs"])
         mail = self.call("email")
         self.assertEqual(len(mail["threads"]), 3)

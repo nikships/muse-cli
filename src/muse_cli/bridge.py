@@ -628,6 +628,8 @@ class Backend:
             row = cli.feed_row(day, ed, u)
             row["summary"] = u.get("summary") or u.get("body_md") or u.get("kicker")
             row["reaction"] = u.get("reaction") or u.get("viewer_reaction")
+            row.update({"emoji": u.get("emoji"), "kicker": u.get("kicker"), "category": u.get("category"),
+                        "source": u.get("connector_attribution"), "why": u.get("why_did_i_see_this")})
             units.append(row)
         return {"units": units[:limit]}
 
@@ -697,7 +699,12 @@ class Backend:
 
     def m_files(self, p):
         sid = self.need_chat()
-        rows = cli.file_rows(self.history_events(sid, _int(p, "limit", 40)))
+        rows = []
+        # 200 is as far back as one chat.history call reaches.
+        for ev in self.history_events(sid, _int(p, "limit", 200)):
+            m = to_message(ev)
+            for f in (m or {}).get("files") or []:
+                rows.append({"seq": m["seq"], "message_id": m["id"], **f})
         return {"files": [{k: r.get(k) for k in FILE_KEYS} for r in rows]}
 
     def m_download(self, p):
