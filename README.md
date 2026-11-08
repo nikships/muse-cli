@@ -21,7 +21,7 @@ A command-line client for your personal muse.ai AI agent: chat from the terminal
 
 - **Chat from the shell:** send a message and get the agent's reply back as JSON.
 - **Script it:** every command prints JSON, so it pipes into `jq`, cron jobs, and other AI agents.
-- **Full coverage:** named commands for the common tasks, plus a `raw` escape hatch for all 258 gateway methods.
+- **Full coverage:** named commands for the common tasks, plus a `raw` escape hatch for all 402 gateway methods.
 - **Agent-ready:** ships an agent skill so coding agents can drive your muse.ai agent for you.
 
 ## Agents driving agents
@@ -204,12 +204,23 @@ muse-cli goals                                    # one goal: muse-cli goal <id>
 muse-cli ideas                                    # one idea: muse-cli idea <id>
 muse-cli idea-exec <idea-id>                      # agent acts on the idea
 
+muse-cli tasks                                    # scheduled tasks (reminders, recurring jobs)
+muse-cli task-runs --job <task-id> --limit 5      # recent runs, all tasks without --job
+muse-cli task-run <task-id>                       # run a scheduled task now
+muse-cli voices --gender F --accent British       # voice catalog; also --search, --tone
+muse-cli voice                                    # the agent's current voice
+muse-cli email                                    # Muse Mail: mailbox + threads (--cursor for more)
+muse-cli email-thread <thread-id>                 # messages in a thread; also email-message <id>
+muse-cli email-attachment <message-id> 0 -o ./out # save attachment number 0
+muse-cli peers                                    # Trusted Network status and connected agents
+muse-cli export-data -o ./out                     # download all your agent's data as a ZIP
+
 muse-cli session-start --title "trip planning"    # new side chat
 muse-cli session-rename <id> "new title"
 muse-cli session-archive <id>                     # also: pin, unpin, unarchive, delete
 muse-cli seen <thread-id>
 muse-cli wake
-muse-cli raw <method> --body '{}'                 # escape hatch: any of 258 gateway methods
+muse-cli raw <method> --body '{}'                 # escape hatch: any of 402 gateway methods
 ```
 
 The interactive chat prints plain text, one message per line, so it works well
@@ -220,6 +231,12 @@ Any command above can also be run with a leading slash (`/status`, `/goals`,
 
 Every other command prints JSON. Your VM is auto-discovered from your session, and a
 random device id is generated on first run.
+
+Some features are rolled out per account. When yours does not have one, the
+command exits with a gateway error that names it, for example
+`email_not_enabled` for Muse Mail. `peers` reports when the Trusted Network is
+turned off instead of failing. `export-data` streams the ZIP to disk (the
+server picks the file name), so a large agent does not need the memory.
 
 Pipe it into other tools:
 
@@ -243,7 +260,7 @@ found during reverse engineering.
 |----------|-------------|
 | [skills/muse-cli/SKILL.md](https://github.com/nikships/muse-cli/blob/main/skills/muse-cli/SKILL.md) | Agent skill: install check, auth setup, command reference |
 | [docs/PROTOCOL.md](https://github.com/nikships/muse-cli/blob/main/docs/PROTOCOL.md) | Gateway protocol reference: auth chain, Noise transport, framing, method quirks |
-| [routes.json](https://github.com/nikships/muse-cli/blob/main/src/muse_cli/routes.json) | All 258 gateway methods with paths and services |
+| [routes.json](https://github.com/nikships/muse-cli/blob/main/src/muse_cli/routes.json) | All 402 gateway methods with paths and services |
 | `muse-cli raw --help` | Escape hatch for calling any gateway method directly |
 
 ## Development
@@ -259,7 +276,7 @@ uv run python -m unittest discover -s tests   # unit tests (no network)
 muse-cli/
 assets/              README artwork (generated with Muse Image)
 docs/PROTOCOL.md     protocol reference for re-derivation
-scripts/             release version bump (used by CI)
+scripts/             release version bump (used by CI), route table extractor
 site/                landing page (Firebase Hosting)
 skills/muse-cli/     agent skill
 src/muse_cli/
@@ -269,7 +286,7 @@ src/muse_cli/
   gateway.py         gateway client (auth, Noise transport, subscriptions)
   update.py          daily update notice and `muse-cli update`
   skill.py           installs and refreshes the bundled agent skill
-  routes.json        258 gateway methods extracted from the web client
+  routes.json        402 gateway methods extracted from the web client
   desc0.bin          protobuf descriptors for the wire framing
   desc1.bin
 tests/               unit tests (no network)

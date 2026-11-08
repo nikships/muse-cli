@@ -32,13 +32,16 @@ Noise-XX WebSocket to the user's personal VM, carrying protobuf envelopes.
   `~/.agents/skills/muse-cli` (`MUSE_CLI_SKILLS` overrides the root). The wheel
   carries `skills/muse-cli/SKILL.md` as `muse_cli/SKILL.md` via
   `force-include` in `pyproject.toml`, so keep that mapping.
-- `src/muse_cli/routes.json`, `desc0.bin`, `desc1.bin`: the 258 gateway
+- `src/muse_cli/routes.json`, `desc0.bin`, `desc1.bin`: the 402 gateway
   methods and the protobuf descriptors for the framing. Generated data, so do
   not hand-edit.
 - `src/muse_cli/__init__.py`: holds `__version__`, the only place the version
   lives. `pyproject.toml` reads it.
 - `tests/`: `unittest` tests, no network needed.
 - `scripts/bump_version.py`: release version bump used by CI.
+- `scripts/extract_routes.py`: regenerates `routes.json`, `desc0.bin` and
+  `desc1.bin` from the live web bundle (needs a working login). Run it instead
+  of editing those files.
 - `skills/muse-cli/SKILL.md`: the agent skill that `install.sh` copies to
   `~/.agents/skills/muse-cli`.
 - `install.sh`: installs the CLI with `uv tool` plus the skill.
@@ -104,7 +107,8 @@ change:
 - `skills/muse-cli/SKILL.md` (command list and gotchas)
 - the `--help` text in `cli.py`
 - `docs/PROTOCOL.md`, if you learn a new server quirk
-- the route count (258) in the README and skill, if `routes.json` changes
+- the route count (402) in the README, skill, and `site/index.html`, if
+  `routes.json` changes
 
 ## Pull requests and releases
 

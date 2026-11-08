@@ -282,6 +282,123 @@ class InterruptTest(unittest.TestCase):
         self.assertNotIn("Traceback", err.getvalue())
 
 
+class NewCommandsTest(unittest.TestCase):
+    def run_cmd(self, fn, gw, **kw):
+        results = []
+        with patch.object(cli, "load_config", return_value={}), \
+                patch.object(cli, "connect", return_value=gw), \
+                patch.object(cli, "out", side_effect=results.append):
+            fn(cli.argparse.Namespace(**kw))
+        return results[0] if results else None
+
+    def test_voices_sends_filters_as_lists(self):
+        gw = MagicMock()
+        gw.call_json.return_value = {"total": 1, "voices": [
+            {"id": "v1", "name": "Aria", "description": "Warm", "is_selected": True}]}
+        res = self.run_cmd(cli.cmd_voices, gw, search="calm", gender="F", accent=None, tone="Warm",
+                           limit=5, offset=10, raw=False)
+        self.assertEqual(gw.call_json.call_args[1]["query"],
+                         {"source": "library", "limit": 5, "offset": 10, "query": "calm",
+                          "gender": ["F"], "tone": ["Warm"]})
+        self.assertEqual(res["voices"], [{"id": "v1", "name": "Aria", "description": "Warm",
+                                          "selected": True}])
+
+    def test_task_run_fills_path_and_body(self):
+        gw = MagicMock()
+        gw.call_json.return_value = {"queued": True}
+        self.run_cmd(cli.cmd_task_run, gw, id="heartbeat")
+        gw.call_json.assert_called_once_with("tasks.run", path_params={"job_id": "heartbeat"},
+                                             body={"job_id": "heartbeat"})
+
+    def test_tasks_rows(self):
+        gw = MagicMock()
+        gw.call_json.return_value = {"schedules": [
+            {"id": "t1", "title": "Watch", "mode": "task", "enabled": True,
+             "schedule_key": "interval@6h", "next_run_at_utc": 0, "timezone": "UTC"}]}
+        rows = self.run_cmd(cli.cmd_tasks, gw, raw=False)
+        self.assertEqual(rows[0]["id"], "t1")
+        self.assertIsNone(rows[0]["next_run"])
+
+    def test_peers_disabled_skips_the_contact_list(self):
+        gw = MagicMock()
+        gw.call_json.return_value = {"supported": True, "availability": "disabled",
+                                     "identity": {"muse_id": "muse1x"},
+                                     "features": {"pairing": False, "peer_sidechats": True}}
+        res = self.run_cmd(cli.cmd_peers, gw, limit=50, raw=False)
+        self.assertEqual(gw.call_json.call_count, 1)
+        self.assertEqual(res["features"], ["peer_sidechats"])
+        self.assertIn("turned off", res["note"])
+
+    def test_email_thread_formats_messages(self):
+        gw = MagicMock()
+        gw.call_json.return_value = {"messages": [{
+            "id": "m1", "direction": "inbound", "header_from": "a@x.com", "header_from_name": "Al",
+            "subject": "Hi", "text_body": "hello", "created_at": 1794168000000,
+            "sender_authentication": {"verdict": "pass"},
+            "attachments": [{"index": 0, "filename": "a.pdf", "mime_type": "application/pdf"}]}]}
+        rows = self.run_cmd(cli.cmd_email_thread, gw, id="th1", raw=False)
+        gw.call_json.assert_called_once_with("email.threads.get", path_params={"thread_id": "th1"})
+        self.assertEqual(rows[0]["from"], "Al <a@x.com>")
+        self.assertEqual(rows[0]["authentication"], "pass")
+        self.assertEqual(rows[0]["attachments"][0]["filename"], "a.pdf")
+
+    def test_email_attachment_is_saved_inside_the_directory(self):
+        gw = MagicMock()
+        gw.call_json.return_value = {"content_base64": "aGk=",
+                                     "metadata": {"filename": "../../evil.sh", "mime_type": "text/plain"}}
+        with tempfile.TemporaryDirectory() as tmp:
+            res = self.run_cmd(cli.cmd_email_attachment, gw, message="m1", index=0,
+                               output=tmp, force=False)
+            self.assertEqual(res["file"], os.path.join(os.path.abspath(tmp), "evil.sh"))
+            self.assertEqual(read(res["file"]), "hi")
+
+    def test_export_name_from_content_disposition(self):
+        self.assertEqual(cli._export_name({"content-disposition": 'attachment; filename="EYI Package.zip"'}),
+                         "EYI Package.zip")
+        self.assertEqual(cli._export_name({"content-disposition": "attachment; filename*=UTF-8''a%2Fb"}),
+                         "b.zip")
+        self.assertEqual(cli._export_name({}), "Agent Data.zip")
+
+    def export(self, tmp, headers, body=b"PKdata", **kw):
+        gw = MagicMock()
+
+        def request_to(fh, method, timeout=None, on_progress=None):
+            fh.write(body)
+            return headers
+        gw.request_to.side_effect = request_to
+        args = dict(output=tmp + os.sep, force=False, timeout=None)
+        args.update(kw)
+        with patch.object(sys, "stderr", io.StringIO()):
+            return self.run_cmd(cli.cmd_export_data, gw, **args)
+
+    def test_export_data_saves_the_zip_under_the_server_name(self):
+        headers = {"content-type": "application/zip", "content-length": "6",
+                   "content-disposition": 'attachment; filename="Agent Data.zip"'}
+        with tempfile.TemporaryDirectory() as tmp:
+            res = self.export(tmp, headers)
+            self.assertEqual(res, {"file": os.path.join(os.path.abspath(tmp), "Agent Data.zip"), "bytes": 6})
+            again = self.export(tmp, headers)
+            self.assertNotEqual(again["file"], res["file"])
+            self.assertEqual(set(os.listdir(tmp)),
+                             {"Agent Data.zip", os.path.basename(again["file"])})
+
+    def test_export_data_rejects_a_truncated_or_non_zip_reply(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            for headers in ({"content-type": "text/html"},
+                            {"content-type": "application/zip", "content-length": "99"}):
+                with self.assertRaises(cli.GatewayError):
+                    self.export(tmp, headers)
+            self.assertEqual(os.listdir(tmp), [])
+
+    def test_export_data_refuses_to_overwrite_a_named_file(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            dest = os.path.join(tmp, "mine.zip")
+            with open(dest, "w") as fh:
+                fh.write("keep")
+            with self.assertRaises(SystemExit):
+                self.export(tmp, {"content-type": "application/zip"}, output=dest)
+            self.assertEqual(read(dest), "keep")
+
 class BuildParserTest(unittest.TestCase):
     def test_build_parser_registers_all_commands(self):
         ap = cli.build_parser()
@@ -289,7 +406,9 @@ class BuildParserTest(unittest.TestCase):
         self.assertTrue(sub_actions)
         choices = sub_actions[0].choices
         expected = {"auth", "chat", "status", "threads", "history", "send", "files",
-                    "download", "watch", "feed", "goals", "ideas", "unread", "raw"}
+                    "download", "watch", "feed", "goals", "ideas", "unread", "raw",
+                    "tasks", "task-runs", "task-run", "voices", "voice", "email", "email-thread",
+                    "email-message", "email-attachment", "peers", "export-data"}
         self.assertTrue(expected.issubset(set(choices.keys())))
 
 
