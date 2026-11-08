@@ -228,6 +228,8 @@ muse-cli raw <method> --body '{}'                 # escape hatch: any of 402 gat
 
 ### The full-screen app
 
+![The muse-cli full-screen app in demo mode](https://raw.githubusercontent.com/nikships/muse-cli/main/assets/tui.png)
+
 On a terminal, `muse-cli` opens a full-screen app built on
 [OpenTUI](https://github.com/anomalyco/opentui). It needs
 [Bun](https://bun.sh) 1.3.14 or later; `muse-cli tui` offers to install it.
@@ -303,7 +305,7 @@ MUSE_CLI_TUI_DIR=$PWD uv run muse-cli tui --demo   # run the app from the checko
 
 ```
 muse-cli/
-assets/              README artwork (generated with Muse Image)
+assets/              README artwork (generated with Muse Image) and app screenshots
 docs/PROTOCOL.md     protocol reference for re-derivation
 docs/TUI.md          the full-screen app and its bridge protocol
 scripts/             release version bump (used by CI), route table extractor
