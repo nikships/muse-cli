@@ -1,8 +1,51 @@
 [
  {
+  "method": "rv_migration.enable_export",
+  "http": "POST",
+  "path": "/yolk/v1/rv-migration/enable-export",
+  "service": "yolk",
+  "noiseOnly": true,
+  "requestBody": "empty",
+  "requestTimeoutMs": 120000,
+  "maxResponseBytes": 16384
+ },
+ {
+  "method": "vault.luks_status",
+  "http": "GET",
+  "path": "/luks/status",
+  "service": "vault",
+  "noiseOnly": true
+ },
+ {
+  "method": "link_preview",
+  "http": "POST",
+  "path": "/api/link-preview",
+  "noiseOnly": true,
+  "maxResponseBytes": 196608
+ },
+ {
+  "method": "browser_activity.snapshot",
+  "http": "GET",
+  "path": "/api/browser-activity/actions/{action_id}/snapshot",
+  "responseType": "binary",
+  "channel": "media"
+ },
+ {
+  "method": "computer.preview",
+  "http": "GET",
+  "path": "/api/computer/previews/{task_id}/{sha256}",
+  "responseType": "binary",
+  "channel": "media"
+ },
+ {
   "method": "chat.history",
   "http": "GET",
   "path": "/chat/history"
+ },
+ {
+  "method": "professional_consent.resume",
+  "http": "POST",
+  "path": "/api/professional-consent/resume"
  },
  {
   "method": "chat.mark_seen",
@@ -13,6 +56,22 @@
   "method": "chat.sxs.select",
   "http": "POST",
   "path": "/api/chat/sxs/select"
+ },
+ {
+  "method": "sharing.eligibility",
+  "http": "GET",
+  "path": "/api/sharing/eligibility",
+  "service": "daemon",
+  "noiseOnly": true,
+  "requestTimeoutMs": 15000
+ },
+ {
+  "method": "sharing.attempt",
+  "http": "POST",
+  "path": "/api/sharing/attempt",
+  "service": "daemon",
+  "noiseOnly": true,
+  "requestTimeoutMs": 35000
  },
  {
   "method": "activity.list",
@@ -33,6 +92,11 @@
   "method": "tasks.runs",
   "http": "GET",
   "path": "/tasks/runs"
+ },
+ {
+  "method": "tasks.run",
+  "http": "POST",
+  "path": "/tasks/{job_id}/run"
  },
  {
   "method": "tasks.delete",
@@ -91,6 +155,43 @@
   "path": "/health"
  },
  {
+  "method": "bug_report_logs.create",
+  "http": "POST",
+  "path": "/api/debug/bug-report-logs",
+  "noiseOnly": true,
+  "requestTimeoutMs": 900000
+ },
+ {
+  "method": "bug_report_logs.download",
+  "http": "GET",
+  "path": "/api/debug/bug-report-logs/{file_id}",
+  "noiseOnly": true,
+  "responseType": "binary",
+  "maxResponseBytes": 7864320,
+  "requestTimeoutMs": 120000,
+  "channel": "media"
+ },
+ {
+  "method": "home_link_bug_reports.collect",
+  "http": "POST",
+  "path": "/api/debug/home-link-bug-reports",
+  "requestBody": "empty",
+  "noiseOnly": true,
+  "requestTimeoutMs": 35000
+ },
+ {
+  "method": "dyi.export",
+  "http": "POST",
+  "path": "/api/dyi/export",
+  "service": "daemon",
+  "requestBody": "empty",
+  "noiseOnly": true,
+  "responseType": "binary",
+  "requestTimeoutMs": 3900000,
+  "responseIdleTimeoutMs": 3900000,
+  "channel": "media"
+ },
+ {
   "method": "product_improvements.get",
   "http": "GET",
   "path": "/api/product-improvements",
@@ -101,6 +202,144 @@
   "method": "product_improvements.set",
   "http": "POST",
   "path": "/api/product-improvements",
+  "service": "daemon",
+  "noiseOnly": true
+ },
+ {
+  "method": "email.mailbox.get",
+  "http": "GET",
+  "path": "/api/email/mailbox",
+  "service": "daemon",
+  "noiseOnly": true
+ },
+ {
+  "method": "email.mailbox.setup",
+  "http": "GET",
+  "path": "/api/email/mailbox/setup",
+  "service": "daemon",
+  "noiseOnly": true
+ },
+ {
+  "method": "email.mailbox.create",
+  "http": "POST",
+  "path": "/api/email/mailbox",
+  "service": "daemon",
+  "noiseOnly": true
+ },
+ {
+  "method": "email.mailbox.update",
+  "http": "PATCH",
+  "path": "/api/email/mailbox",
+  "service": "daemon",
+  "noiseOnly": true
+ },
+ {
+  "method": "email.mailbox.address_availability",
+  "http": "GET",
+  "path": "/api/email/mailbox/address-availability",
+  "service": "daemon",
+  "noiseOnly": true
+ },
+ {
+  "method": "email.mailbox.setup.end",
+  "http": "POST",
+  "path": "/api/email/mailbox/setup/end",
+  "service": "daemon",
+  "noiseOnly": true,
+  "requestBody": "empty"
+ },
+ {
+  "method": "email.mailbox.delete",
+  "http": "DELETE",
+  "path": "/api/email/mailbox",
+  "service": "daemon",
+  "noiseOnly": true,
+  "requestBody": "empty"
+ },
+ {
+  "method": "email.messages.get",
+  "http": "GET",
+  "path": "/api/email/messages/{message_id}",
+  "service": "daemon",
+  "noiseOnly": true
+ },
+ {
+  "method": "email.messages.delete",
+  "http": "DELETE",
+  "path": "/api/email/messages/{message_id}",
+  "service": "daemon",
+  "noiseOnly": true,
+  "requestBody": "empty"
+ },
+ {
+  "method": "email.attachment.get",
+  "http": "GET",
+  "path": "/api/email/messages/{message_id}/attachments/{index}",
+  "service": "daemon",
+  "noiseOnly": true,
+  "maxResponseBytes": 37748736
+ },
+ {
+  "method": "email.threads.list",
+  "http": "GET",
+  "path": "/api/email/threads",
+  "service": "daemon",
+  "noiseOnly": true
+ },
+ {
+  "method": "email.threads.get",
+  "http": "GET",
+  "path": "/api/email/threads/{thread_id}",
+  "service": "daemon",
+  "noiseOnly": true
+ },
+ {
+  "method": "email.owners.list",
+  "http": "GET",
+  "path": "/api/email/owners",
+  "service": "daemon",
+  "noiseOnly": true
+ },
+ {
+  "method": "email.owners.revoke",
+  "http": "DELETE",
+  "path": "/api/email/owners/{owner_id}",
+  "service": "daemon",
+  "noiseOnly": true,
+  "requestBody": "empty"
+ },
+ {
+  "method": "email.owner_challenges.create",
+  "http": "POST",
+  "path": "/api/email/owners/challenges",
+  "service": "daemon",
+  "noiseOnly": true
+ },
+ {
+  "method": "email.owner_challenges.verify",
+  "http": "POST",
+  "path": "/api/email/owners/challenges/{challenge_id}/verify",
+  "service": "daemon",
+  "noiseOnly": true
+ },
+ {
+  "method": "email.settings.get",
+  "http": "GET",
+  "path": "/api/email/settings",
+  "service": "daemon",
+  "noiseOnly": true
+ },
+ {
+  "method": "email.settings.update",
+  "http": "PATCH",
+  "path": "/api/email/settings",
+  "service": "daemon",
+  "noiseOnly": true
+ },
+ {
+  "method": "email.owner_candidates.list",
+  "http": "GET",
+  "path": "/api/email/owner-candidates",
   "service": "daemon",
   "noiseOnly": true
  },
@@ -119,16 +358,16 @@
   "noiseOnly": true
  },
  {
+  "method": "grants.list",
+  "http": "GET",
+  "path": "/grants",
+  "service": "daemon",
+  "noiseOnly": true
+ },
+ {
   "method": "vm.enrollment_health",
   "http": "GET",
   "path": "/health/enrollment"
- },
- {
-  "method": "vault.luks_status",
-  "http": "GET",
-  "path": "/luks/status",
-  "service": "vault",
-  "noiseOnly": true
  },
  {
   "method": "voice.user_speech_started",
@@ -136,14 +375,66 @@
   "path": "/api/voice/user-speech-started"
  },
  {
+  "method": "voice.calls.user_speech",
+  "http": "POST",
+  "path": "/api/voice/calls/user-speech"
+ },
+ {
   "method": "voice.active_voice",
   "http": "GET",
   "path": "/api/voice/active-voice"
  },
  {
+  "method": "voice.active_voice.save",
+  "http": "POST",
+  "path": "/api/voice/active-voice"
+ },
+ {
+  "method": "voice.calls.media_endpoint",
+  "http": "GET",
+  "path": "/api/voice/calls/media-endpoint"
+ },
+ {
   "method": "voice.available_voices",
   "http": "GET",
   "path": "/api/voice/available-voices"
+ },
+ {
+  "method": "voice.catalog",
+  "http": "GET",
+  "path": "/api/voice/catalog"
+ },
+ {
+  "method": "voice.catalog_filters",
+  "http": "GET",
+  "path": "/api/voice/catalog/filters"
+ },
+ {
+  "method": "voice.speak",
+  "http": "POST",
+  "path": "/api/voice/speak",
+  "noiseOnly": true,
+  "channel": "media",
+  "responseType": "binary",
+  "maxResponseBytes": 4194304,
+  "requestTimeoutMs": 20000,
+  "responseIdleTimeoutMs": 30000
+ },
+ {
+  "method": "voice.custom_voices.list",
+  "http": "GET",
+  "path": "/api/voice/custom-voices"
+ },
+ {
+  "method": "voice.custom_voices.rename",
+  "http": "PATCH",
+  "path": "/api/voice/custom-voices/{saved_voice_id}"
+ },
+ {
+  "method": "voice.custom_voices.delete",
+  "http": "DELETE",
+  "path": "/api/voice/custom-voices/{saved_voice_id}",
+  "requestBody": "empty"
  },
  {
   "method": "voice.pipeline_profiles",
@@ -154,6 +445,29 @@
   "method": "voice.select_pipeline_profile",
   "http": "POST",
   "path": "/api/voice/pipeline-profile"
+ },
+ {
+  "method": "voice.s2s_prompts",
+  "http": "GET",
+  "path": "/api/voice/s2s-prompts"
+ },
+ {
+  "method": "voice.select_s2s_prompt",
+  "http": "POST",
+  "path": "/api/voice/s2s-prompt"
+ },
+ {
+  "method": "voice.avatar_video.prepare",
+  "http": "POST",
+  "path": "/api/voice/avatar-video/prepare",
+  "noiseOnly": true,
+  "requestTimeoutMs": 8000
+ },
+ {
+  "method": "client.runtime_state",
+  "http": "POST",
+  "path": "/api/client/runtime-state",
+  "noiseOnly": true
  },
  {
   "method": "voice.start_call",
@@ -208,7 +522,7 @@
  {
   "method": "connectors.accounts_link",
   "http": "POST",
-  "path": "/connectors/{id}/accounts/link"
+  "path": "/connectors/{id}/accounts/link?capabilities={capabilities}"
  },
  {
   "method": "foa_auth.callback",
@@ -332,6 +646,21 @@
   "path": "/memory/reindex"
  },
  {
+  "method": "appeals.packet",
+  "http": "GET",
+  "path": "/api/safety-appeals/file",
+  "service": "daemon",
+  "noiseOnly": true,
+  "responseType": "binary"
+ },
+ {
+  "method": "appeals.submit",
+  "http": "POST",
+  "path": "/api/safety-appeals",
+  "service": "daemon",
+  "noiseOnly": true
+ },
+ {
   "method": "bootstrap.reset",
   "http": "POST",
   "path": "/bootstrap/reset"
@@ -340,6 +669,12 @@
   "method": "subscription.callback",
   "http": "POST",
   "path": "/subscription/callback"
+ },
+ {
+  "method": "subscription.redeem_complimentary",
+  "http": "POST",
+  "path": "/subscription/redeem-complimentary",
+  "requestTimeoutMs": 90000
  },
  {
   "method": "reactions.toggle",
@@ -358,6 +693,11 @@
   "path": "/ac_oauth/callback"
  },
  {
+  "method": "github.installation.callback",
+  "http": "POST",
+  "path": "/api/github/installation/callback"
+ },
+ {
   "method": "api_key_auth.callback",
   "http": "POST",
   "path": "/api_key_auth/callback",
@@ -368,7 +708,9 @@
   "http": "POST",
   "path": "/v1/custom-connectors/register",
   "service": "authd",
-  "aliases": "[\"custom_oauth_connector.register\"]"
+  "aliases": [
+   "custom_oauth_connector.register"
+  ]
  },
  {
   "method": "custom_connectors.list",
@@ -383,9 +725,20 @@
   "service": "authd"
  },
  {
+  "method": "vm_migrations.latest",
+  "http": "GET",
+  "path": "/api/vm-migrations/latest",
+  "noiseOnly": true
+ },
+ {
   "method": "connectors.list",
   "http": "GET",
   "path": "/connectors"
+ },
+ {
+  "method": "connectors.homepage",
+  "http": "GET",
+  "path": "/connectors/homepage"
  },
  {
   "method": "connectors.get",
@@ -396,6 +749,11 @@
   "method": "connectors.connect_info",
   "http": "GET",
   "path": "/connectors/{id}/connect/info"
+ },
+ {
+  "method": "connectors.connect",
+  "http": "POST",
+  "path": "/connectors/{id}/connect"
  },
  {
   "method": "connectors.permissions",
@@ -450,13 +808,6 @@
   "noiseOnly": true
  },
  {
-  "method": "browser_activity.snapshot",
-  "http": "GET",
-  "path": "/api/browser-activity/actions/{action_id}/snapshot",
-  "responseType": "binary",
-  "channel": "media"
- },
- {
   "method": "voice.dictation",
   "http": "POST",
   "path": "/api/voice/dictation?sample_rate_hz={sample_rate_hz}",
@@ -468,6 +819,27 @@
   "path": "/api/browser-task/{task_id}"
  },
  {
+  "method": "browser_task.clipboard.readiness",
+  "http": "POST",
+  "path": "/api/browser-task/{task_id}/clipboard/readiness",
+  "noiseOnly": true,
+  "maxResponseBytes": 2048
+ },
+ {
+  "method": "browser_task.clipboard.copy",
+  "http": "POST",
+  "path": "/api/browser-task/{task_id}/clipboard/copy",
+  "noiseOnly": true,
+  "maxResponseBytes": 370688
+ },
+ {
+  "method": "browser_task.clipboard.paste",
+  "http": "POST",
+  "path": "/api/browser-task/{task_id}/clipboard/paste",
+  "noiseOnly": true,
+  "maxResponseBytes": 2048
+ },
+ {
   "method": "browser_task.takeover",
   "http": "POST",
   "path": "/api/browser-task/{task_id}/takeover"
@@ -476,6 +848,13 @@
   "method": "browser_task.present",
   "http": "POST",
   "path": "/api/browser-task/{task_id}/present"
+ },
+ {
+  "method": "browser_task.viewer",
+  "http": "PATCH",
+  "path": "/api/browser-task/{task_id}/viewer",
+  "service": "daemon",
+  "noiseOnly": true
  },
  {
   "method": "browser_task.heartbeat",
@@ -496,6 +875,85 @@
   "method": "browser_task.stop",
   "http": "POST",
   "path": "/api/browser-task/{task_id}/stop"
+ },
+ {
+  "method": "browser_task.refresh_environment",
+  "http": "POST",
+  "path": "/api/browser-task/{task_id}/refresh-environment",
+  "requestTimeoutMs": 150000
+ },
+ {
+  "method": "browser_task.end_and_release",
+  "http": "POST",
+  "path": "/api/browser-task/{task_id}/end-and-release",
+  "requestTimeoutMs": 120000
+ },
+ {
+  "method": "browser_task.lease_info",
+  "http": "GET",
+  "path": "/api/browser-task/{task_id}/lease"
+ },
+ {
+  "method": "browser.debug_access.get",
+  "http": "GET",
+  "path": "/api/browser/debug-access",
+  "noiseOnly": true
+ },
+ {
+  "method": "browser.lease_overrides.get",
+  "http": "GET",
+  "path": "/api/browser/lease-overrides",
+  "noiseOnly": true
+ },
+ {
+  "method": "browser.lease_overrides.set",
+  "http": "PATCH",
+  "path": "/api/browser/lease-overrides",
+  "noiseOnly": true
+ },
+ {
+  "method": "browser.lease_overrides.release",
+  "http": "POST",
+  "path": "/api/browser/lease-overrides/release",
+  "noiseOnly": true,
+  "requestTimeoutMs": 120000
+ },
+ {
+  "method": "search.debug_overrides.get",
+  "http": "GET",
+  "path": "/api/search/debug-overrides",
+  "noiseOnly": true
+ },
+ {
+  "method": "search.debug_overrides.set",
+  "http": "PATCH",
+  "path": "/api/search/debug-overrides",
+  "noiseOnly": true
+ },
+ {
+  "method": "browser.lease",
+  "http": "POST",
+  "path": "/api/browser/lease",
+  "requestTimeoutMs": 120000
+ },
+ {
+  "method": "computer.context",
+  "http": "GET",
+  "path": "/api/computer/context"
+ },
+ {
+  "method": "browser.local_testing.get",
+  "http": "GET",
+  "path": "/api/browser/local-testing",
+  "noiseOnly": true,
+  "requestTimeoutMs": 90000
+ },
+ {
+  "method": "browser.local_testing.set",
+  "http": "PATCH",
+  "path": "/api/browser/local-testing",
+  "noiseOnly": true,
+  "requestTimeoutMs": 90000
  },
  {
   "method": "identity",
@@ -547,6 +1005,13 @@
   "http": "POST",
   "path": "/api/artifacts/pin",
   "noiseOnly": true
+ },
+ {
+  "method": "artifacts.slides.rebuild",
+  "http": "POST",
+  "path": "/api/artifacts/slides/rebuild",
+  "noiseOnly": true,
+  "requestTimeoutMs": 180000
  },
  {
   "method": "onboarding.variants",
@@ -604,6 +1069,11 @@
   "path": "/goals/{id}"
  },
  {
+  "method": "goals.reorder",
+  "http": "PATCH",
+  "path": "/goals/{id}/order"
+ },
+ {
   "method": "goals.delete",
   "http": "DELETE",
   "path": "/goals/{id}"
@@ -617,6 +1087,11 @@
   "method": "podcasts.feed.get",
   "http": "GET",
   "path": "/api/podcasts/feed"
+ },
+ {
+  "method": "podcasts.feeds.list",
+  "http": "GET",
+  "path": "/api/podcasts/feeds"
  },
  {
   "method": "podcasts.episode.delete",
@@ -659,6 +1134,18 @@
   "path": "/api/idea-cards/{ideaCardId}/execute"
  },
  {
+  "method": "api.idea-cards.share",
+  "http": "POST",
+  "path": "/api/idea-cards/{ideaCardId}/share",
+  "noiseOnly": true
+ },
+ {
+  "method": "api.idea-cards.share-preview",
+  "http": "GET",
+  "path": "/api/idea-cards/{ideaCardId}/share-preview",
+  "noiseOnly": true
+ },
+ {
   "method": "api.idea-cards.debug",
   "http": "GET",
   "path": "/api/idea-cards/{ideaCardId}/debug"
@@ -669,9 +1156,61 @@
   "path": "/api/shopping"
  },
  {
+  "method": "shopping.cart",
+  "http": "GET",
+  "path": "/api/shopping/cart"
+ },
+ {
   "method": "shopping.events",
   "http": "POST",
   "path": "/api/shopping/events"
+ },
+ {
+  "method": "saved.default_status",
+  "http": "GET",
+  "path": "/api/saved/default"
+ },
+ {
+  "method": "saved.default_save",
+  "http": "POST",
+  "path": "/api/saved/default"
+ },
+ {
+  "method": "saved.item_delete",
+  "http": "DELETE",
+  "path": "/api/saved/items/{item_id}"
+ },
+ {
+  "method": "hotels.results",
+  "http": "GET",
+  "path": "/api/hotels/results",
+  "service": "daemon",
+  "noiseOnly": true,
+  "channel": "main",
+  "maxResponseBytes": 2097152
+ },
+ {
+  "method": "hotels.details",
+  "http": "GET",
+  "path": "/api/hotels/details",
+  "service": "daemon",
+  "noiseOnly": true,
+  "channel": "main",
+  "maxResponseBytes": 2097152
+ },
+ {
+  "method": "hotels.events",
+  "http": "POST",
+  "path": "/api/hotels/events",
+  "service": "daemon",
+  "noiseOnly": true,
+  "channel": "main",
+  "maxResponseBytes": 16384
+ },
+ {
+  "method": "ads.details",
+  "http": "GET",
+  "path": "/api/ads/details"
  },
  {
   "method": "feed.list",
@@ -751,16 +1290,6 @@
   "path": "/api/feed/social-source-icon/{source}",
   "responseType": "binary",
   "channel": "media"
- },
- {
-  "method": "feed.unit.share",
-  "http": "POST",
-  "path": "/api/feed/units/{unit_id}/share"
- },
- {
-  "method": "feed.ingest",
-  "http": "POST",
-  "path": "/api/feed/ingest"
  },
  {
   "method": "feed.unit.media",
@@ -860,6 +1389,11 @@
   "path": "/spaces/v2/{slug}"
  },
  {
+  "method": "spaces.owned.delete",
+  "http": "DELETE",
+  "path": "/spaces/v2/{slug}?source=space"
+ },
+ {
   "method": "spaces.saved.delete",
   "http": "DELETE",
   "path": "/spaces/v2/{slug}?source=saved_space"
@@ -870,9 +1404,62 @@
   "path": "/spaces/v2/{slug}/save"
  },
  {
+  "method": "artifacts.save",
+  "http": "POST",
+  "path": "/api/artifacts/save",
+  "noiseOnly": true
+ },
+ {
+  "method": "artifacts.participation.get",
+  "http": "GET",
+  "path": "/api/artifacts/participation",
+  "noiseOnly": true
+ },
+ {
+  "method": "artifacts.participation.update",
+  "http": "POST",
+  "path": "/api/artifacts/participation",
+  "noiseOnly": true
+ },
+ {
   "method": "spaces.share.review",
   "http": "GET",
   "path": "/spaces/share/{slug}/review"
+ },
+ {
+  "method": "spaces.share",
+  "http": "POST",
+  "path": "/spaces/share/{slug}",
+  "requestTimeoutMs": 600000
+ },
+ {
+  "method": "spaces.share.settings",
+  "http": "GET",
+  "path": "/spaces/share/{slug}/settings"
+ },
+ {
+  "method": "spaces.sharing.settings",
+  "http": "GET",
+  "path": "/spaces/share/{slug}/settings",
+  "requestTimeoutMs": 600000
+ },
+ {
+  "method": "spaces.audience.get",
+  "http": "GET",
+  "path": "/spaces/share/{slug}/audience",
+  "requestTimeoutMs": 600000
+ },
+ {
+  "method": "spaces.audience.set",
+  "http": "POST",
+  "path": "/spaces/share/{slug}/audience/update",
+  "requestTimeoutMs": 600000
+ },
+ {
+  "method": "spaces.share.settings.save",
+  "http": "POST",
+  "path": "/spaces/share/{slug}/settings",
+  "requestTimeoutMs": 600000
  },
  {
   "method": "spaces.share.status",
@@ -993,6 +1580,21 @@
   "responseType": "binary"
  },
  {
+  "method": "fs.raw",
+  "http": "GET",
+  "path": "/fs/raw/{*path}",
+  "responseType": "binary",
+  "channel": "media"
+ },
+ {
+  "method": "fs.thumbnail",
+  "http": "GET",
+  "path": "/fs/thumbnail/{*path}",
+  "responseType": "binary",
+  "maxResponseBytes": 614400,
+  "channel": "media"
+ },
+ {
   "method": "idea-cards.media",
   "http": "GET",
   "path": "/api/idea-cards/media/{handle}",
@@ -1033,31 +1635,41 @@
   "method": "node.list",
   "http": "POST",
   "path": "/api/nodes/list",
-  "aliases": "[\"/nodes/list\"]"
+  "aliases": [
+   "/nodes/list"
+  ]
  },
  {
   "method": "node.register",
   "http": "POST",
   "path": "/api/nodes/register",
-  "aliases": "[\"/nodes/register\"]"
+  "aliases": [
+   "/nodes/register"
+  ]
  },
  {
   "method": "node.heartbeat",
   "http": "POST",
   "path": "/api/nodes/heartbeat",
-  "aliases": "[\"/nodes/heartbeat\"]"
+  "aliases": [
+   "/nodes/heartbeat"
+  ]
  },
  {
   "method": "node.unpair",
   "http": "POST",
   "path": "/api/nodes/unpair",
-  "aliases": "[\"/nodes/unpair\"]"
+  "aliases": [
+   "/nodes/unpair"
+  ]
  },
  {
   "method": "node.disconnect",
   "http": "POST",
   "path": "/api/nodes/disconnect",
-  "aliases": "[\"/nodes/disconnect\"]"
+  "aliases": [
+   "/nodes/disconnect"
+  ]
  },
  {
   "method": "pin.update",
@@ -1092,9 +1704,21 @@
   "service": "sentinel"
  },
  {
+  "method": "egress.approval.editable_message",
+  "http": "GET",
+  "path": "/approvals/{approval_id}/editable-message",
+  "service": "sentinel"
+ },
+ {
   "method": "egress.approval.decide",
   "http": "POST",
   "path": "/approvals/{approval_id}/decide",
+  "service": "sentinel"
+ },
+ {
+  "method": "egress.approval.edit_message",
+  "http": "POST",
+  "path": "/approvals/{approval_id}/edit-message",
   "service": "sentinel"
  },
  {
@@ -1114,6 +1738,12 @@
   "http": "GET",
   "path": "/permissions/settings",
   "service": "sentinel"
+ },
+ {
+  "method": "permissions.inventory",
+  "http": "GET",
+  "path": "/permissions/inventory",
+  "service": "daemon"
  },
  {
   "method": "permissions.settings.update",
@@ -1164,6 +1794,18 @@
   "service": "sentinel"
  },
  {
+  "method": "egress.permissions.scoped",
+  "http": "GET",
+  "path": "/permissions/scopes/{scope_type}/{scope_id}",
+  "service": "sentinel"
+ },
+ {
+  "method": "egress.permissions.scoped.update",
+  "http": "PATCH",
+  "path": "/permissions/scopes/{scope_type}/{scope_id}",
+  "service": "sentinel"
+ },
+ {
   "method": "egress.permissions.revoke",
   "http": "POST",
   "path": "/permissions/revoke",
@@ -1192,6 +1834,22 @@
   "http": "DELETE",
   "path": "/permissions/connectors/{connector}",
   "service": "sentinel"
+ },
+ {
+  "method": "ssh.operator.enable",
+  "http": "POST",
+  "path": "/v1/ssh/operator/enable",
+  "service": "ssh_access",
+  "requestBody": "empty",
+  "noiseOnly": true
+ },
+ {
+  "method": "ssh.operator.disable",
+  "http": "POST",
+  "path": "/v1/ssh/operator/disable",
+  "service": "ssh_access",
+  "requestBody": "empty",
+  "noiseOnly": true
  },
  {
   "method": "credentials.list",
@@ -1237,6 +1895,27 @@
   "method": "credentials.capture",
   "http": "POST",
   "path": "/v1/credentials/capture",
+  "service": "authd",
+  "noiseOnly": true
+ },
+ {
+  "method": "credentials.capture.update",
+  "http": "PUT",
+  "path": "/v1/credentials/capture",
+  "service": "authd",
+  "noiseOnly": true
+ },
+ {
+  "method": "credentials.capture.external_provider.request",
+  "http": "POST",
+  "path": "/v1/credentials/capture/external-provider/request",
+  "service": "authd",
+  "noiseOnly": true
+ },
+ {
+  "method": "credentials.capture.external_provider.fulfill",
+  "http": "POST",
+  "path": "/v1/credentials/capture/external-provider/fulfill",
   "service": "authd",
   "noiseOnly": true
  },
@@ -1338,6 +2017,24 @@
   "noiseOnly": true
  },
  {
+  "method": "navigation.tab_order.get",
+  "http": "GET",
+  "path": "/api/navigation/tab-order",
+  "noiseOnly": true
+ },
+ {
+  "method": "navigation.tab_order.set",
+  "http": "PUT",
+  "path": "/api/navigation/tab-order",
+  "noiseOnly": true
+ },
+ {
+  "method": "artifacts.placement.set",
+  "http": "POST",
+  "path": "/api/artifacts/placement",
+  "noiseOnly": true
+ },
+ {
   "method": "chat.stream",
   "http": "POST",
   "path": "/chat/stream",
@@ -1356,7 +2053,8 @@
   "http": "POST",
   "path": "/chat/subscribe",
   "noiseOnly": true,
-  "streamMode": "subscription"
+  "streamMode": "subscription",
+  "requestTimeoutMs": 30000
  },
  {
   "method": "activity.subscribe",
@@ -1406,5 +2104,307 @@
   "path": "/themes/subscribe",
   "noiseOnly": true,
   "streamMode": "subscription"
+ },
+ {
+  "method": "computer.subscribe",
+  "http": "POST",
+  "path": "/api/computer/subscribe",
+  "noiseOnly": true,
+  "streamMode": "subscription"
+ },
+ {
+  "method": "peers.status",
+  "http": "GET",
+  "path": "/peers/status",
+  "service": "daemon",
+  "noiseOnly": true
+ },
+ {
+  "method": "peers.list",
+  "http": "GET",
+  "path": "/peers",
+  "service": "daemon",
+  "noiseOnly": true
+ },
+ {
+  "method": "peers.invites.list",
+  "http": "GET",
+  "path": "/peers/invites",
+  "service": "daemon",
+  "noiseOnly": true
+ },
+ {
+  "method": "peers.disconnect",
+  "http": "DELETE",
+  "path": "/peers/{muse_id}?relationship_generation_id={relationship_generation_id}&relationship_revision={relationship_revision}&relationship_started_at_ms={relationship_started_at_ms}&request_expires_at_ms={request_expires_at_ms}",
+  "requestBody": "empty",
+  "service": "daemon",
+  "noiseOnly": true
+ },
+ {
+  "method": "peers.update",
+  "http": "PATCH",
+  "path": "/peers/{muse_id}",
+  "service": "daemon",
+  "noiseOnly": true
+ },
+ {
+  "method": "peers.reset_conversation",
+  "http": "POST",
+  "path": "/peers/{muse_id}/reset_conversation",
+  "service": "daemon",
+  "noiseOnly": true
+ },
+ {
+  "method": "peers.requests.list",
+  "http": "GET",
+  "path": "/peers/requests",
+  "service": "daemon",
+  "noiseOnly": true
+ },
+ {
+  "method": "peers.invites.create",
+  "http": "POST",
+  "path": "/peers/invites",
+  "service": "daemon",
+  "noiseOnly": true
+ },
+ {
+  "method": "peers.invites.accept",
+  "http": "POST",
+  "path": "/peers/invites/accept",
+  "service": "daemon",
+  "noiseOnly": true
+ },
+ {
+  "method": "peers.invites.open",
+  "http": "POST",
+  "path": "/peers/invites/open",
+  "service": "daemon",
+  "noiseOnly": true
+ },
+ {
+  "method": "peers.invites.opened",
+  "http": "GET",
+  "path": "/peers/invites/opened",
+  "service": "daemon",
+  "noiseOnly": true
+ },
+ {
+  "method": "peers.inbox.deliver",
+  "http": "POST",
+  "path": "/peers/inbox/deliver",
+  "service": "daemon",
+  "noiseOnly": true
+ },
+ {
+  "method": "peers.inbox.list",
+  "http": "GET",
+  "path": "/peers/inbox",
+  "service": "daemon",
+  "noiseOnly": true
+ },
+ {
+  "method": "peers.inbox.decline",
+  "http": "POST",
+  "path": "/peers/inbox/decline",
+  "service": "daemon",
+  "noiseOnly": true
+ },
+ {
+  "method": "peers.invites.delivery",
+  "http": "POST",
+  "path": "/peers/invites/{invite_id}/delivery",
+  "service": "daemon",
+  "noiseOnly": true
+ },
+ {
+  "method": "peers.activity.list",
+  "http": "GET",
+  "path": "/peers/activity",
+  "service": "daemon",
+  "noiseOnly": true
+ },
+ {
+  "method": "peers.activity.dismiss",
+  "http": "POST",
+  "path": "/peers/activity/{activity_id}/dismiss",
+  "requestBody": "empty",
+  "service": "daemon",
+  "noiseOnly": true
+ },
+ {
+  "method": "peers.rules.list",
+  "http": "GET",
+  "path": "/peers/{muse_id}/rules",
+  "service": "daemon",
+  "noiseOnly": true
+ },
+ {
+  "method": "peers.rules.set",
+  "http": "POST",
+  "path": "/peers/{muse_id}/rules",
+  "service": "daemon",
+  "noiseOnly": true
+ },
+ {
+  "method": "peers.connections.get",
+  "http": "GET",
+  "path": "/peers/connections/{connection_id}",
+  "service": "daemon",
+  "noiseOnly": true
+ },
+ {
+  "method": "peers.connections.list",
+  "http": "GET",
+  "path": "/peers/connections",
+  "service": "daemon",
+  "noiseOnly": true
+ },
+ {
+  "method": "peers.connections.related",
+  "http": "GET",
+  "path": "/peers/connections/{connection_id}/related",
+  "service": "daemon",
+  "noiseOnly": true
+ },
+ {
+  "method": "peers.connections.resources",
+  "http": "GET",
+  "path": "/peers/connections/{connection_id}/resources",
+  "service": "daemon",
+  "noiseOnly": true
+ },
+ {
+  "method": "peers.connections.disconnect",
+  "http": "POST",
+  "path": "/peers/connections/{connection_id}/disconnect",
+  "requestBody": "empty",
+  "service": "daemon",
+  "noiseOnly": true
+ },
+ {
+  "method": "peers.rules.delete",
+  "http": "DELETE",
+  "path": "/peers/{muse_id}/rules/{rule_id}",
+  "requestBody": "empty",
+  "service": "daemon",
+  "noiseOnly": true
+ },
+ {
+  "method": "peers.invites.revoke",
+  "http": "DELETE",
+  "path": "/peers/invites/{invite_id}",
+  "requestBody": "empty",
+  "service": "daemon",
+  "noiseOnly": true
+ },
+ {
+  "method": "peers.requests.sas",
+  "http": "GET",
+  "path": "/peers/requests/{relationship_generation_id}/sas",
+  "service": "daemon",
+  "noiseOnly": true
+ },
+ {
+  "method": "peers.requests.sas.confirm",
+  "http": "POST",
+  "path": "/peers/requests/{relationship_generation_id}/sas/confirm",
+  "service": "daemon",
+  "noiseOnly": true
+ },
+ {
+  "method": "peers.discretion.write",
+  "http": "POST",
+  "path": "/fs/write",
+  "noiseOnly": true,
+  "requestTimeoutMs": 360000
+ },
+ {
+  "method": "peers.photo",
+  "http": "GET",
+  "path": "/peers/{muse_id}/photo/{sha256}",
+  "service": "daemon",
+  "noiseOnly": true,
+  "responseType": "binary",
+  "maxResponseBytes": 32768,
+  "channel": "media"
+ },
+ {
+  "method": "peers.avatar",
+  "http": "GET",
+  "path": "/peers/{muse_id}/avatar/{sha256}",
+  "service": "daemon",
+  "noiseOnly": true,
+  "responseType": "binary",
+  "maxResponseBytes": 131072,
+  "channel": "media"
+ },
+ {
+  "method": "peerSpaces.share",
+  "http": "POST",
+  "path": "/peer-spaces/share",
+  "service": "daemon",
+  "noiseOnly": true
+ },
+ {
+  "method": "peerSpaces.unshare",
+  "http": "POST",
+  "path": "/peer-spaces/unshare",
+  "service": "daemon",
+  "noiseOnly": true
+ },
+ {
+  "method": "peerSpaces.shares.list",
+  "http": "GET",
+  "path": "/peer-spaces/shares/{slug}",
+  "service": "daemon",
+  "noiseOnly": true
+ },
+ {
+  "method": "peerSpaces.sharedWithMe.list",
+  "http": "GET",
+  "path": "/peer-spaces/shared-with-me",
+  "service": "daemon",
+  "noiseOnly": true
+ },
+ {
+  "method": "peerSpaces.document",
+  "http": "GET",
+  "path": "/peer-spaces/{host_muse}/{slug}/",
+  "service": "daemon",
+  "noiseOnly": true,
+  "responseType": "binary",
+  "maxResponseBytes": 8388608,
+  "channel": "media"
+ },
+ {
+  "method": "peerSpaces.asset",
+  "http": "GET",
+  "path": "/peer-spaces/{host_muse}/{slug}/{*subpath}",
+  "service": "daemon",
+  "noiseOnly": true,
+  "responseType": "binary",
+  "maxResponseBytes": 8388608,
+  "channel": "media"
+ },
+ {
+  "method": "peerSpaces.get",
+  "http": "GET",
+  "path": "/peer-spaces/by-id/{host_muse}/{space_id}/{*subpath}",
+  "service": "daemon",
+  "noiseOnly": true,
+  "responseType": "binary",
+  "maxResponseBytes": 8388608,
+  "channel": "media"
+ },
+ {
+  "method": "peerSpaces.post",
+  "http": "POST",
+  "path": "/peer-spaces/by-id/{host_muse}/{space_id}/{*subpath}",
+  "service": "daemon",
+  "noiseOnly": true,
+  "responseType": "binary",
+  "maxResponseBytes": 8388608
  }
 ]

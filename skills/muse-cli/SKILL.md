@@ -177,6 +177,15 @@ muse-cli goals                                          # one goal: muse-cli goa
 muse-cli ideas                                          # one idea: muse-cli idea <id>
 muse-cli unread
 muse-cli seen <thread-id>
+muse-cli tasks                                          # scheduled tasks (id, schedule, next_run)
+muse-cli task-runs --job <task-id> --limit 5            # what recent runs did
+muse-cli voices --search calm --limit 5                 # voice catalog; --gender F|M|N --accent --tone
+muse-cli voice                                          # current voice
+muse-cli email                                          # Muse Mail mailbox + threads
+muse-cli email-thread <thread-id>                       # also: email-message <id>
+muse-cli email-attachment <message-id> <index> -o DIR
+muse-cli peers                                          # Trusted Network status / connected agents
+muse-cli export-data -o DIR                             # full data export ZIP (can be hundreds of MB)
 ```
 
 Management (visible side effects, confirm with the user first when destructive):
@@ -184,6 +193,7 @@ Management (visible side effects, confirm with the user first when destructive):
 ```bash
 muse-cli feed-react <unit-id> love
 muse-cli idea-exec <idea-id>          # the agent acts on the idea (real work)
+muse-cli task-run <task-id>           # runs a scheduled task now (real work)
 muse-cli session-start --title "x"    # new side chat
 muse-cli session-rename <id> "title"  # also: pin, unpin, archive, unarchive, delete
 muse-cli wake
@@ -191,7 +201,7 @@ muse-cli wake
 
 ## Escape hatch
 
-`muse-cli raw <method> --body '{...}' [--param k=v]` calls any of the 258
+`muse-cli raw <method> --body '{...}' [--param k=v]` calls any of the 402
 gateway methods in `routes.json`. Prefer the named commands above; use raw
 only for methods with no wrapper.
 
@@ -209,6 +219,13 @@ only for methods with no wrapper.
   may be missing.
 - `idea-exec --thread` may be ignored by the server; the run can land in the
   main chat.
+- Muse Mail, the Trusted Network (`peers`) and some other features are
+  enabled per account. `email` failing with `email_not_enabled` (exit 3) means
+  the account has no Muse Mail, not a broken install. `peers` prints
+  `availability: "disabled"` and a note when the Trusted Network is off.
+- `export-data` writes the user's entire agent data (workspace, chats) to
+  disk. It takes about 20 s for a few hundred MB. Run it only when asked, and
+  keep the ZIP private.
 - Running `muse-cli` with no command opens the interactive chat and blocks on
   stdin. From an agent, always pass an explicit command such as `status` or
   `send`.

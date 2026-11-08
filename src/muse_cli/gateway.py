@@ -44,7 +44,8 @@ ApplicationRequest = _msg("hatch.noise.ApplicationRequest")
 with open(os.path.join(_HERE, "routes.json")) as fh:
     ROUTES = {e["method"]: e for e in json.load(fh)}
 
-SERVICE_IDS = {"daemon": 0, "sentinel": 1, "vault": 2, "authd": 3}
+SERVICE_IDS = {"daemon": 0, "sentinel": 1, "vault": 2, "authd": 3, "ssh_access": 4, "yolk": 5}
+DEFAULT_TIMEOUT = 30
 
 
 class AuthError(RuntimeError):
@@ -241,9 +242,13 @@ class Gateway:
         for k, v in (path_params or {}).items():
             path = path.replace("{" + k + "}", urllib.parse.quote(str(v), safe=""))
         if query:
-            qs = urllib.parse.urlencode({k: v for k, v in query.items() if v is not None})
+            # Lists become repeated keys (gender=F&gender=M), which is what
+            # filter params such as voice.catalog's expect.
+            qs = urllib.parse.urlencode({k: v for k, v in query.items() if v is not None}, doseq=True)
             if qs:
                 path = path + ("&" if "?" in path else "?") + qs
+        if route.get("requestBody") == "empty":
+            body = None
         raw = b"" if body is None else (body if isinstance(body, bytes) else json.dumps(body).encode())
         req = ApplicationRequest(verb=route["http"], path=path, body=raw, end_body=True)
         h = req.headers.add()
@@ -262,35 +267,65 @@ class Gateway:
         return sid
 
     # -- unary request/response --------------------------------------------
-    def request(self, method, path_params=None, body=None, query=None, timeout=30, route=None):
+    def _exchange(self, method, path_params, body, query, timeout, route, sink):
+        """Send one request; feed 2xx body bytes to sink(bytes). Returns headers.
+
+        An error status buffers its body instead, so it can be reported.
+        timeout=None uses the route's own requestTimeoutMs from the web client.
+        """
         route = route or ROUTES[method]
+        if timeout is None:
+            timeout = route.get("requestTimeoutMs", DEFAULT_TIMEOUT * 1000) / 1000
         if route["http"] == "GET" and body is not None and query is None:
             query, body = body, None
         sid = self._open(method, path_params, body, query, route=route)
-        status, chunks, deadline = None, [], time.time() + timeout
-        while time.time() < deadline:
+        status, headers, err, done = None, {}, [], False
+        deadline = time.time() + timeout
+
+        def feed(data):
+            if data:
+                (sink if 200 <= status < 300 else err.append)(data)
+
+        while time.time() < deadline and not done:
             sf = self._read_frame()
             if sf.stream_id != sid:
                 continue
             kind = sf.WhichOneof("kind")
             if kind == "response":
                 status = sf.response.status
-                if sf.response.body:
-                    chunks.append(bytes(sf.response.body))
-                if sf.response.end_body:
-                    break
-            elif kind == "body_chunk":
-                chunks.append(bytes(sf.body_chunk.data))
-                if sf.body_chunk.end_body:
-                    break
+                headers = {h.key.lower(): h.value for h in sf.response.headers}
+                feed(bytes(sf.response.body))
+                done = sf.response.end_body
+            elif kind == "body_chunk" and status is not None:
+                feed(bytes(sf.body_chunk.data))
+                done = sf.body_chunk.end_body
             elif kind == "reset":
                 raise GatewayError(-1, f"stream reset {sf.reset.code}: {sf.reset.reason}")
         if status is None:
             raise TimeoutError(f"no response for {method}")
-        payload = b"".join(chunks)
         if status < 200 or status >= 300:
-            raise GatewayError(status, payload[:500].decode("utf-8", "replace"))
-        return payload
+            raise GatewayError(status, b"".join(err)[:500].decode("utf-8", "replace"))
+        if not done:
+            raise TimeoutError(f"{method} response did not finish within {timeout:.0f}s")
+        return headers
+
+    def request(self, method, path_params=None, body=None, query=None, timeout=DEFAULT_TIMEOUT,
+                route=None):
+        chunks = []
+        self._exchange(method, path_params, body, query, timeout, route, chunks.append)
+        return b"".join(chunks)
+
+    def request_to(self, fh, method, path_params=None, body=None, query=None, timeout=None,
+                   route=None, on_progress=None):
+        """Stream a (binary) response body into file object fh; return its headers."""
+        written = [0]
+
+        def sink(data):
+            fh.write(data)
+            written[0] += len(data)
+            if on_progress:
+                on_progress(written[0])
+        return self._exchange(method, path_params, body, query, timeout, route, sink)
 
     # -- files the agent produced (sandbox://...) ---------------------------
     def download_file(self, ref, timeout=300):
