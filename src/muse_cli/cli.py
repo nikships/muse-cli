@@ -1139,6 +1139,15 @@ def _chat(args):
     cmd_chat(args)
 
 
+def cmd_tui(args):
+    from . import tui
+    demo = getattr(args, "demo", False) or os.environ.get("MUSE_CLI_DEMO") == "1"
+    code = tui.launch(args, demo=demo, bun=getattr(args, "bun", None),
+                      ask=getattr(args, "ask", True))
+    if code:
+        sys.exit(code)
+
+
 def build_parser():
     ap = argparse.ArgumentParser(prog="muse-cli", description="CLI for your personal muse.ai agent")
     ap.add_argument("--version", action="version", version=f"%(prog)s {__version__}")
@@ -1187,7 +1196,15 @@ def build_parser():
                         "Chromium browser on macOS, else agent-browser)")
     p.set_defaults(fn=cmd_auth_export)
 
-    sub.add_parser("chat", help="interactive chat (the default with no command)").set_defaults(fn=_chat)
+    sub.add_parser("chat", help="plain line-by-line chat (the default with no command "
+                   "when the full-screen app can't run)").set_defaults(fn=_chat)
+    p = sub.add_parser("tui", help="full-screen app (OpenTUI); `chat` is the plain version",
+                       description="Full-screen app built on OpenTUI. Needs Bun 1.3.14 or later "
+                                   "(offers to install it). Bare `muse-cli` opens it on a terminal "
+                                   "when Bun is there; set MUSE_CLI_UI=plain to keep the plain chat.")
+    p.add_argument("--demo", action="store_true",
+                   help="made-up data for screenshots; never touches muse.ai")
+    p.set_defaults(fn=cmd_tui)
     sub.add_parser("status", help="VM, session count, unread, identity").set_defaults(fn=cmd_status)
     p = sub.add_parser("threads", help="list chats and side chats")
     p.add_argument("--all", dest="archived", action="store_true", help="include archived")
@@ -1309,7 +1326,12 @@ def main(argv=None):
     ap = build_parser()
     args = ap.parse_args(argv)
     if args.cmd is None:
-        args.cmd, args.fn = "chat", _chat
+        from . import tui
+        bun = tui.should_open()
+        if bun:
+            args.cmd, args.fn, args.bun, args.ask = "tui", cmd_tui, bun, False
+        else:
+            args.cmd, args.fn = "chat", _chat
     # A piped command prints JSON. The notice stays off unless both streams
     # are a terminal, and `update` is already doing the upgrade.
     notice = None if args.cmd == "update" else start_update_check()

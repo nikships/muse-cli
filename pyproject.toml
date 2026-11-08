@@ -72,6 +72,10 @@ muse-cli = "muse_cli.cli:main"
 [tool.hatch.version]
 path = "src/muse_cli/__init__.py"
 
+[tool.hatch.build]
+# The app's dependencies are installed per user at first launch.
+exclude = ["node_modules"]
+
 [tool.hatch.build.targets.wheel]
 packages = ["src/muse_cli"]
 
