@@ -116,7 +116,7 @@ function Row(props: { item: PanelItem; i: number; selected: boolean; width: numb
             </text>
           ) : null}
           <box flexDirection="row">
-            <text fg={theme.textFaint}>{[u.date, u.edition].filter(Boolean).join(" · ")}</text>
+            <text fg={theme.textFaint}>{[when(u.date), u.edition].filter(Boolean).join(" · ")}</text>
             <box flexGrow={1} />
             <text fg={u.reaction === "love" ? theme.pink : theme.link}>{r}</text>
           </box>
@@ -276,7 +276,7 @@ export function Panel(props: { view: Exclude<View, "chat">; width: number }) {
     scroll.current?.scrollChildIntoView(`row-${index}`)
   }, [index, items.length, view])
 
-  const listWidth = split ? Math.floor(props.width * 0.45) : props.width
+  const listWidth = split ? Math.floor(props.width * 0.48) : props.width
   const sub =
     view === "mail" && mailbox
       ? String(mailbox.address ?? mailbox.email ?? mailbox.email_address ?? "")

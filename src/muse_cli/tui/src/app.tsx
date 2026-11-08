@@ -222,6 +222,8 @@ export function App() {
     if (name === "f1") return done(), ctl.setOverlay({ kind: "help" })
     const digit = /^[1-7]$/.test(name) ? Number(name) : 0
     if (digit && (key.meta || key.option || s.focus !== "composer")) return done(), ctl.go(VIEWS[digit - 1]!.id)
+    // Tab completes a slash command; the composer handles that itself.
+    if (name === "tab" && s.focus === "composer" && composer.current?.menuOpen()) return
     if (name === "tab" && !key.ctrl) {
       done()
       if (s.focus === "sidebar") return store.set({ focus: s.view === "chat" ? "composer" : "list" })

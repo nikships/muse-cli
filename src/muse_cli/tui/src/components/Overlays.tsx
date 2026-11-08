@@ -346,7 +346,7 @@ export function Toasts() {
   const toasts = useS((s) => s.toasts)
   if (!toasts.length) return null
   return (
-    <box position="absolute" right={2} bottom={2} flexDirection="column" alignItems="flex-end" zIndex={60} gap={0}>
+    <box position="absolute" right={3} bottom={6} flexDirection="column" alignItems="flex-end" zIndex={60} gap={0}>
       {toasts.map((t) => {
         const color = t.level === "error" ? theme.red : t.level === "success" ? theme.green : theme.metaBlue
         const icon = t.level === "error" ? "✕" : t.level === "success" ? "✓" : "◆"

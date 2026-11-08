@@ -97,14 +97,25 @@ export function Sidebar() {
         })}
       </scrollbox>
       <box flexShrink={0} paddingX={1} flexDirection="column">
-        <text fg={theme.textFaint} selectable={false}>
-          {focused ? "enter open · n new · r rename" : "Tab to browse chats"}
-        </text>
         {focused ? (
+          [
+            [["↵", "open"], ["n", "new"], ["r", "rename"]],
+            [["p", "pin"], ["a", "archive"], ["x", "del"]],
+          ].map((row, i) => (
+            <text key={i} selectable={false}>
+              {row.map(([k, label], j) => (
+                <span key={k}>
+                  <span fg={theme.textSoft}>{`${j ? "  " : ""}${k} `}</span>
+                  <span fg={theme.textFaint}>{label}</span>
+                </span>
+              ))}
+            </text>
+          ))
+        ) : (
           <text fg={theme.textFaint} selectable={false}>
-            p pin · a archive · del delete
+            Tab to browse chats
           </text>
-        ) : null}
+        )}
       </box>
     </box>
   )

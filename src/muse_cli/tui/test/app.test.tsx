@@ -106,6 +106,20 @@ describe("App", () => {
     expect(f).not.toContain("press r to retry")
   })
 
+  test("Tab completes a slash command and keeps focus in the message box", async () => {
+    const { setup: s, frame, store } = await mount()
+    await frame((x) => x.includes("Message your Muse"))
+    await s.mockInput.typeText("/ren")
+    await frame((x) => x.includes("Rename this chat"))
+    s.mockInput.pressTab()
+    await s.renderOnce()
+    expect(store.get().focus).toBe("composer")
+    await s.mockInput.typeText("pr")
+    const f = await frame((x) => x.includes("/rename pr"))
+    expect(f).not.toContain("Rename chat")
+    expect(store.get().focus).toBe("composer")
+  })
+
   test("a narrow terminal hides the chat list", async () => {
     const { frame } = await mount(60, 24)
     const f = await frame((x) => x.includes("Message your Muse"))

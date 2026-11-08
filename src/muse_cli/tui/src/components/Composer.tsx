@@ -22,7 +22,7 @@ export const SLASH = [
   { cmd: "/quit", args: "", desc: "Leave muse-cli" },
 ]
 
-export type ComposerHandle = { clear(): boolean; insert(text: string): void; isEmpty(): boolean }
+export type ComposerHandle = { clear(): boolean; insert(text: string): void; isEmpty(): boolean; menuOpen(): boolean }
 
 const KEYS = [
   { name: "return", action: "submit" as const },
@@ -68,6 +68,9 @@ export const Composer = forwardRef<ComposerHandle, { focused: boolean }>(functio
     },
     isEmpty() {
       return !ta.current?.plainText
+    },
+    menuOpen() {
+      return menuOpen
     },
   }))
 
