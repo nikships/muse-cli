@@ -6,6 +6,7 @@ real one: the assistant event appears without a status, its text grows,
 then it completes. MUSE_CLI_DEMO_SPEED=N plays every delay N times faster.
 """
 import copy
+import datetime
 import os
 import random
 import re
@@ -463,32 +464,43 @@ class World:
         self.send(MAIN, f"Let's do this: {idea['title']}")
         return {"ok": True, "ideaCardId": idea["id"], "session_id": MAIN}
 
+    def _at(self, hour, minute, days=0, weekday=None, after=True):
+        """Epoch seconds of the next (or last) local hour:minute, so times match schedules."""
+        now = datetime.datetime.fromtimestamp(self.wall())
+        t = now.replace(hour=hour, minute=minute, second=0, microsecond=0)
+        step = datetime.timedelta(days=1 if weekday is None else 7)
+        if weekday is not None:
+            t += datetime.timedelta(days=(weekday - t.weekday()) % 7)
+        if after and t <= now:
+            t += step
+        while not after and t > now:
+            t -= step
+        return int((t + datetime.timedelta(days=days)).timestamp())
+
     def api_tasks_list(self, pp, b):
-        now = int(self.wall())
         return {"schedules": [
             {"id": "demo-task-1", "title": "Morning briefing", "mode": "recurring", "enabled": True,
-             "schedule_key": "daily 07:30", "next_run_at_utc": now + 14 * 3600, "timezone": "Europe/Lisbon"},
+             "schedule_key": "daily 07:30", "next_run_at_utc": self._at(7, 30)},
             {"id": "demo-task-2", "title": "Water the plants", "mode": "recurring", "enabled": True,
-             "schedule_key": "weekly sun 10:00", "next_run_at_utc": now + 40 * 3600, "timezone": "Europe/Lisbon"},
+             "schedule_key": "weekly sun 10:00", "next_run_at_utc": self._at(10, 0, weekday=6)},
             {"id": "demo-task-3", "title": "Remind me to book the Lisbon flights", "mode": "once",
-             "enabled": False, "schedule_key": "once", "next_run_at_utc": now + 3 * 86400,
-             "timezone": "Europe/Lisbon"},
+             "enabled": False, "schedule_key": "once", "next_run_at_utc": self._at(18, 0, days=2)},
         ], "invalid": []}
 
     def api_tasks_runs(self, pp, b):
-        now = int(self.wall())
+        brief = self._at(7, 30, after=False)
         runs = [
             {"run_id": "demo-run-4", "job_id": "demo-task-1", "status": "succeeded",
-             "trigger_reason": "schedule", "scheduled_for_utc": now - 10 * 3600,
+             "trigger_reason": "schedule", "scheduled_for_utc": brief,
              "result_summary": "Sent your briefing: 3 events, sunny, 2 emails worth reading."},
             {"run_id": "demo-run-3", "job_id": "demo-task-2", "status": "succeeded",
-             "trigger_reason": "schedule", "scheduled_for_utc": now - 6 * 86400,
+             "trigger_reason": "schedule", "scheduled_for_utc": self._at(10, 0, weekday=6, after=False),
              "result_summary": "Reminded you to water the plants."},
             {"run_id": "demo-run-2", "job_id": "demo-task-1", "status": "succeeded",
-             "trigger_reason": "manual", "scheduled_for_utc": now - 34 * 3600,
+             "trigger_reason": "schedule", "scheduled_for_utc": brief - 86400,
              "result_summary": "Sent your briefing: a quiet day ahead."},
             {"run_id": "demo-run-1", "job_id": "demo-task-1", "status": "failed",
-             "trigger_reason": "schedule", "scheduled_for_utc": now - 58 * 3600,
+             "trigger_reason": "schedule", "scheduled_for_utc": brief - 2 * 86400,
              "error_text": "Calendar was briefly unavailable; retried at 07:35."},
         ]
         if b.get("job_id"):

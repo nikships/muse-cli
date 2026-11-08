@@ -174,9 +174,9 @@ function Row(props: { item: PanelItem; i: number; selected: boolean; width: numb
                 {t.title}
               </text>
               <box flexGrow={1} />
-              <text fg={theme.textMuted}>{t.next_run ? `next ${when(t.next_run)}` : "paused"}</text>
+              <text fg={theme.textMuted}>{t.next_run && t.enabled !== false ? `Next: ${when(t.next_run)}` : "paused"}</text>
             </box>
-            <text fg={theme.textFaint}>{[t.schedule, t.mode, t.timezone].filter(Boolean).join(" · ")}</text>
+            <text fg={theme.textFaint}>{[...new Set([t.schedule, t.mode, t.timezone].filter(Boolean))].join(" · ")}</text>
           </Card>
         </box>
       )
