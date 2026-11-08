@@ -484,16 +484,20 @@ def _history_events(gw, thread, limit):
     return gw.call_json("chat.history", body=params).get("chat_events", [])
 
 
+def file_rows(events):
+    rows = []
+    for ev in events:
+        p = ev.get("payload", {}) if isinstance(ev.get("payload"), dict) else {}
+        for r in event_resources(ev):
+            rows.append({"seq": ev.get("seq"),
+                         "message_id": p.get("message_id") or ev.get("message_id"), **r})
+    return rows
+
+
 def cmd_files(args):
     gw = connect(load_config())
     try:
-        rows = []
-        for ev in _history_events(gw, args.thread, args.limit):
-            p = ev.get("payload", {}) if isinstance(ev.get("payload"), dict) else {}
-            for r in event_resources(ev):
-                rows.append({"seq": ev.get("seq"),
-                             "message_id": p.get("message_id") or ev.get("message_id"), **r})
-        out(rows)
+        out(file_rows(_history_events(gw, args.thread, args.limit)))
     finally:
         gw.close()
 
@@ -681,20 +685,25 @@ def cmd_watch(args):
         gw.close()
 
 
+def feed_units(d):
+    for day in d.get("days", []):
+        for ed in day.get("editions", []):
+            for u in ed.get("units", []):
+                yield day, ed, u
+
+
+def feed_row(day, ed, u):
+    return {"id": u.get("unit_id"), "title": u.get("title"),
+            "date": day.get("local_date"), "edition": ed.get("kind")}
+
+
 def cmd_feed(args):
     gw = connect(load_config())
     try:
         d = gw.call_json("feed.list", query={"limit": args.limit} if args.limit else None)
         if args.raw:
             out(d); return
-        rows = []
-        for day in d.get("days", []):
-            for ed in day.get("editions", []):
-                for u in ed.get("units", []):
-                    rows.append({"id": u.get("unit_id"),
-                                 "title": u.get("title"),
-                                 "date": day.get("local_date"),
-                                 "edition": ed.get("kind")})
+        rows = [feed_row(day, ed, u) for day, ed, u in feed_units(d)]
         out(rows[:args.limit] if args.limit else rows)
     finally:
         gw.close()
@@ -725,13 +734,16 @@ def cmd_feed_prompt(_args):
         gw.close()
 
 
+def goal_row(g):
+    return {"id": g.get("id") or g.get("goal_id"), "title": g.get("title"),
+            "status": g.get("status"), "subtitle": g.get("subtitle")}
+
+
 def cmd_goals(_args):
     gw = connect(load_config())
     try:
         d = gw.call_json("goals.list")
-        out([{"id": g.get("id") or g.get("goal_id"), "title": g.get("title"),
-              "status": g.get("status"), "subtitle": g.get("subtitle")}
-             for g in d.get("goals", [])])
+        out([goal_row(g) for g in d.get("goals", [])])
     finally:
         gw.close()
 
@@ -744,16 +756,22 @@ def cmd_goal(args):
         gw.close()
 
 
+def idea_cards(d):
+    for s in d.get("sections", []):
+        for c in s.get("cards", s.get("ideas", [])):
+            yield s, c
+
+
+def idea_row(s, c):
+    return {"id": c.get("id") or c.get("ideaCardId"),
+            "title": c.get("title"), "section": s.get("title")}
+
+
 def cmd_ideas(_args):
     gw = connect(load_config())
     try:
         d = gw.call_json("api.idea-cards.list")
-        rows = []
-        for s in d.get("sections", []):
-            for c in s.get("cards", s.get("ideas", [])):
-                rows.append({"id": c.get("id") or c.get("ideaCardId"),
-                             "title": c.get("title"), "section": s.get("title")})
-        out(rows)
+        out([idea_row(s, c) for s, c in idea_cards(d)])
     finally:
         gw.close()
 
@@ -786,16 +804,25 @@ def _when(ts):
     return time.strftime("%Y-%m-%d %H:%M", time.localtime(ts))
 
 
+def task_row(s):
+    return {"id": s.get("id"), "title": s.get("title"), "mode": s.get("mode"),
+            "enabled": s.get("enabled"), "schedule": s.get("schedule_key"),
+            "next_run": _when(s.get("next_run_at_utc")), "timezone": s.get("timezone")}
+
+
+def task_run_row(r):
+    return {"run_id": r.get("run_id"), "job_id": r.get("job_id"), "status": r.get("status"),
+            "trigger": r.get("trigger_reason"), "scheduled": _when(r.get("scheduled_for_utc")),
+            "summary": r.get("result_summary"), "error": r.get("error_text")}
+
+
 def cmd_tasks(args):
     gw = connect(load_config())
     try:
         d = gw.call_json("tasks.list")
         if args.raw:
             out(d); return
-        out([{"id": s.get("id"), "title": s.get("title"), "mode": s.get("mode"),
-              "enabled": s.get("enabled"), "schedule": s.get("schedule_key"),
-              "next_run": _when(s.get("next_run_at_utc")), "timezone": s.get("timezone")}
-             for s in d.get("schedules", [])])
+        out([task_row(s) for s in d.get("schedules", [])])
     finally:
         gw.close()
 
@@ -809,10 +836,7 @@ def cmd_task_runs(args):
         d = gw.call_json("tasks.runs", body=body)
         if args.raw:
             out(d); return
-        out([{"run_id": r.get("run_id"), "job_id": r.get("job_id"), "status": r.get("status"),
-              "trigger": r.get("trigger_reason"), "scheduled": _when(r.get("scheduled_for_utc")),
-              "summary": r.get("result_summary"), "error": r.get("error_text")}
-             for r in d.get("runs", [])])
+        out([task_run_row(r) for r in d.get("runs", [])])
     finally:
         gw.close()
 
@@ -868,6 +892,14 @@ def _email_message(m):
                             if isinstance(a, dict)]}
 
 
+def email_thread_row(t):
+    last = t.get("last_message") or {}
+    return {"id": t.get("id"), "subject": t.get("subject"),
+            "messages": t.get("message_count"), "participants": t.get("participants"),
+            "last_from": last.get("header_from"), "last_date": _when(last.get("created_at")),
+            "preview": last.get("preview")}
+
+
 def cmd_email(args):
     gw = connect(load_config())
     try:
@@ -875,13 +907,7 @@ def cmd_email(args):
         d = gw.call_json("email.threads.list", body={"cursor": args.cursor} if args.cursor else {})
         if args.raw:
             out({"mailbox": mailbox, "threads": d}); return
-        rows = []
-        for t in d.get("data", []):
-            last = t.get("last_message") or {}
-            rows.append({"id": t.get("id"), "subject": t.get("subject"),
-                         "messages": t.get("message_count"), "participants": t.get("participants"),
-                         "last_from": last.get("header_from"), "last_date": _when(last.get("created_at")),
-                         "preview": last.get("preview")})
+        rows = [email_thread_row(t) for t in d.get("data", [])]
         out({"mailbox": mailbox, "threads": rows,
              "next_cursor": ((d.get("paging") or {}).get("cursors") or {}).get("after")})
     finally:
@@ -1047,15 +1073,19 @@ def cmd_session_start(args):
         gw.close()
 
 
+def session_op(gw, kind, session_id, title=None):
+    if kind == "rename":
+        body = {"session_id": session_id, "title": title}
+    else:
+        body = {"method": f"/api/session/{kind}", "session_id": session_id}
+    return gw.call_json(f"session.{kind}", body=body)
+
+
 def cmd_session_op(kind):
     def run(args):
         gw = connect(load_config())
         try:
-            if kind == "rename":
-                body = {"session_id": args.id, "title": args.title}
-            else:
-                body = {"method": f"/api/session/{kind}", "session_id": args.id}
-            out(gw.call_json(f"session.{kind}", body=body))
+            out(session_op(gw, kind, args.id, getattr(args, "title", None)))
         finally:
             gw.close()
     return run
@@ -1109,6 +1139,15 @@ def _chat(args):
     cmd_chat(args)
 
 
+def cmd_tui(args):
+    from . import tui
+    demo = getattr(args, "demo", False) or os.environ.get("MUSE_CLI_DEMO") == "1"
+    code = tui.launch(args, demo=demo, bun=getattr(args, "bun", None),
+                      ask=getattr(args, "ask", True))
+    if code:
+        sys.exit(code)
+
+
 def build_parser():
     ap = argparse.ArgumentParser(prog="muse-cli", description="CLI for your personal muse.ai agent")
     ap.add_argument("--version", action="version", version=f"%(prog)s {__version__}")
@@ -1157,7 +1196,15 @@ def build_parser():
                         "Chromium browser on macOS, else agent-browser)")
     p.set_defaults(fn=cmd_auth_export)
 
-    sub.add_parser("chat", help="interactive chat (the default with no command)").set_defaults(fn=_chat)
+    sub.add_parser("chat", help="plain line-by-line chat (the default with no command "
+                   "when the full-screen app can't run)").set_defaults(fn=_chat)
+    p = sub.add_parser("tui", help="full-screen app (OpenTUI); `chat` is the plain version",
+                       description="Full-screen app built on OpenTUI. Needs Bun 1.3.14 or later "
+                                   "(offers to install it). Bare `muse-cli` opens it on a terminal "
+                                   "when Bun is there; set MUSE_CLI_UI=plain to keep the plain chat.")
+    p.add_argument("--demo", action="store_true",
+                   help="made-up data for screenshots; never touches muse.ai")
+    p.set_defaults(fn=cmd_tui)
     sub.add_parser("status", help="VM, session count, unread, identity").set_defaults(fn=cmd_status)
     p = sub.add_parser("threads", help="list chats and side chats")
     p.add_argument("--all", dest="archived", action="store_true", help="include archived")
@@ -1279,7 +1326,12 @@ def main(argv=None):
     ap = build_parser()
     args = ap.parse_args(argv)
     if args.cmd is None:
-        args.cmd, args.fn = "chat", _chat
+        from . import tui
+        bun = tui.should_open()
+        if bun:
+            args.cmd, args.fn, args.bun, args.ask = "tui", cmd_tui, bun, False
+        else:
+            args.cmd, args.fn = "chat", _chat
     # A piped command prints JSON. The notice stays off unless both streams
     # are a terminal, and `update` is already doing the upgrade.
     notice = None if args.cmd == "update" else start_update_check()

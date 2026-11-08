@@ -41,7 +41,10 @@ python -m muse_cli.bridge  (muse_cli/bridge.py)  ── owns the Gateway
   `muse-cli tui` without Bun offers to install it on a terminal and falls
   back to the plain chat when declined.
 - `muse-cli tui --demo` (or `MUSE_CLI_DEMO=1`) runs the bridge with made-up
-  data and never touches muse.ai. Screenshots and tests use it.
+  data and never touches muse.ai. Screenshots and tests use it. Its fake
+  gateway (`muse_cli/demo.py`) answers with the real server's shapes, and a
+  reply streams in word by word. `MUSE_CLI_DEMO_SPEED=N` plays every demo
+  delay N times faster; in demo mode `idle` comes 3 s after the last reply.
 
 ## Bridge protocol
 
@@ -76,7 +79,8 @@ Bridge to app (event, no id):
 main chat.
 
 `Session`: `{"session_id", "title", "is_thread", "pinned", "archived",
-"updated_at_ms", "unread"}`.
+"updated_at_ms", "unread"}`. The main chat has `session_id: null` here too,
+so its `Session` opens with `open` as is.
 
 `Message`:
 
@@ -121,7 +125,7 @@ backoff.
 | ------ | ------ | ------ |
 | `connect` | `{}` | `{"vm_id", "chat": Chat, "identity"}`; uses `chat.json` for the last chat |
 | `login` | `{}` | `{"ok": bool, "log": str}`; runs `auth export` with its output captured, reconnects on success |
-| `sessions` | `{"archived": false}` | `{"sessions": [Session]}`; main chat first, then pinned, then by `updated_at_ms` desc |
+| `sessions` | `{"archived": false}` | `{"sessions": [Session]}`; main chat first, then pinned, then by `updated_at_ms` desc. `archived: true` also lists archived chats |
 | `open` | `{"session_id": str\|null, "title": str, "limit": 40}` | `{"chat": Chat, "messages": [Message]}`; sets the active chat and saves `chat.json`. `not_found` for a deleted chat |
 | `history` | `{"limit": 40, "before_seq": int?}` | `{"messages": [Message]}` for the active chat |
 | `send` | `{"text": str}` | `{"sent": true, "baseline": seq}`; then `thinking`, `draft`, `message`, `idle` events |
