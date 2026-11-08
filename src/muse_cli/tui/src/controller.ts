@@ -349,24 +349,28 @@ export class Controller {
 
   async showDetail(title: string, subtitle: string | undefined, load: () => Promise<string>) {
     this.setOverlay({ kind: "detail", title, subtitle, body: "", loading: true })
+    // The overlay object itself is the ticket: a newer detail or a close replaces it.
+    const mine = this.s.overlay
     try {
       const body = await load()
-      if (this.s.overlay?.kind === "detail" && this.s.overlay.title === title) {
-        this.setOverlay({ kind: "detail", title, subtitle, body, loading: false })
-      }
+      if (this.s.overlay === mine) this.setOverlay({ kind: "detail", title, subtitle, body, loading: false })
     } catch (e) {
-      if (this.s.overlay?.kind === "detail") this.setOverlay({ kind: "detail", title, subtitle, body: `**Couldn't load this.** ${errText(e)}` })
+      if (this.s.overlay === mine) this.setOverlay({ kind: "detail", title, subtitle, body: `**Couldn't load this.** ${errText(e)}` })
     }
   }
 
   async react(unit: string, reaction: "like" | "love" | "dislike") {
-    this.store.set((s) => ({
-      feed: s.feed.data ? { ...s.feed, data: s.feed.data.map((u) => (u.id === unit ? { ...u, reaction } : u)) } : s.feed,
-    }))
+    const prev = this.s.feed.data?.find((u) => u.id === unit)?.reaction ?? null
+    const mark = (r: string | null) =>
+      this.store.set((s) => ({
+        feed: s.feed.data ? { ...s.feed, data: s.feed.data.map((u) => (u.id === unit ? { ...u, reaction: r } : u)) } : s.feed,
+      }))
+    mark(reaction)
     try {
       await this.bridge.request("feed_react", { unit, reaction })
       this.toast(reaction === "love" ? "Loved it ♥" : reaction === "like" ? "Liked" : "Got it, less like this", "success")
     } catch (e) {
+      mark(prev)
       this.toast(errText(e), "error")
     }
   }

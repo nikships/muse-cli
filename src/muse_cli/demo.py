@@ -580,8 +580,14 @@ class DemoBackend(Backend):
         self.wait = 60 / speed
         self.world = World(clock, speed)
         self._state = {"session_id": None, "title": "main chat"}
-        super().__init__(emit, clock=clock, connect=lambda cfg: DemoGateway(self.world),
+        # About as long as a real sign-in takes, so the demo starts like the real app.
+        self.connect_delay = 1.2 / speed
+        super().__init__(emit, clock=clock, connect=self._connect,
                          cfg={"node_id": "demo-node", "cookies_file": ""})
+
+    def _connect(self, cfg):
+        time.sleep(self.connect_delay)
+        return DemoGateway(self.world)
 
     def load_state(self):
         return dict(self._state)

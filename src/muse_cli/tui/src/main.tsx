@@ -35,7 +35,10 @@ const renderer = await createCliRenderer({
 renderer.setTerminalTitle("muse")
 
 ctl.onQuit = () => {
-  if (!renderer.isDestroyed) renderer.destroy()
+  if (renderer.isDestroyed) return
+  // An empty title hands the tab name back to the shell.
+  renderer.setTerminalTitle("")
+  renderer.destroy()
 }
 
 createRoot(renderer).render(
@@ -44,4 +47,4 @@ createRoot(renderer).render(
   </AppContext.Provider>,
 )
 
-ctl.boot()
+void ctl.boot()

@@ -102,7 +102,7 @@ export const Composer = forwardRef<ComposerHandle, { focused: boolean }>(functio
     if (!value.trim()) return
     t.setText("")
     sync()
-    sent.current.push(value)
+    sent.current = [...sent.current.slice(-99), value]
     recall.current = -1
     ctl.send(value)
   }

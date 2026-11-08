@@ -59,6 +59,36 @@ export function ago(ms: number, now = Date.now()): string {
   return new Date(ms).toLocaleDateString([], { month: "short", day: "numeric" })
 }
 
+// Server dates arrive as "2026-11-08 12:09" (local) or ISO. Unknown shapes pass through.
+export function parseDate(s?: string | null): number | null {
+  if (!s) return null
+  const m = /^(\d{4}-\d{2}-\d{2})(?:[ T](\d{2}:\d{2}(?::\d{2})?)(.*))?$/.exec(s.trim())
+  if (!m) return null
+  const ms = new Date(`${m[1]}T${m[2] ?? "00:00"}${m[3] ?? ""}`).getTime()
+  return Number.isNaN(ms) ? null : ms
+}
+
+// "9:00 AM" today, "Tomorrow 9:00 AM", "Nov 9, 9:00 AM"; short drops the time off today.
+export function when(s?: string | null, now = Date.now(), short = false): string {
+  const ms = parseDate(s)
+  if (ms === null) return s ?? ""
+  const d = new Date(ms)
+  const today = new Date(now)
+  const start = (x: Date) => new Date(x.getFullYear(), x.getMonth(), x.getDate()).getTime()
+  const diff = Math.round((start(d) - start(today)) / 86_400_000)
+  const time = /\d{2}:\d{2}/.test(s!) ? clock(ms) : ""
+  if (diff === 0) return time || "Today"
+  const name =
+    diff === 1 ? "Tomorrow"
+    : diff === -1 ? "Yesterday"
+    : d.toLocaleDateString([], { month: "short", day: "numeric", year: d.getFullYear() === today.getFullYear() ? undefined : "numeric" })
+  return short || !time ? name : `${name}, ${time}`
+}
+
+export function plural(n: number, word: string): string {
+  return `${n} ${word}${n === 1 ? "" : "s"}`
+}
+
 export function bytes(n?: number): string {
   if (!n && n !== 0) return ""
   if (n < 1024) return `${n} B`
@@ -67,7 +97,13 @@ export function bytes(n?: number): string {
 }
 
 export function fileName(path: string): string {
-  const clean = decodeURIComponent(path.split("?")[0] ?? path).replace(/\/+$/, "")
+  let clean = path.split("?")[0] ?? path
+  try {
+    clean = decodeURIComponent(clean)
+  } catch {
+    // A stray % is not an escape; show the path as it is.
+  }
+  clean = clean.replace(/\/+$/, "")
   return clean.slice(clean.lastIndexOf("/") + 1) || "file"
 }
 

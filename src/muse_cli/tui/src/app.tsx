@@ -79,7 +79,7 @@ export function App() {
     const s = store.get()
     const v = s.view as Exclude<View, "chat">
     const items = panelItems(s, v)
-    const it = items[s.selected[v]]
+    const it = items[Math.min(s.selected[v], items.length - 1)]
     if (name === "r") {
       ctl.loadView(v, true)
       return true
@@ -107,7 +107,7 @@ export function App() {
           else
             ctl.showDetail(it.v.subject || "(no subject)", it.v.last_from, async () => {
               const res = await ctl.bridge.request("email_thread", { id: it.v.id })
-              return res.messages.map((m) => `**${m.from ?? ""}** · ${m.date ?? ""}\n\n${m.text ?? ""}`).join("\n\n---\n\n")
+              return (res.messages ?? []).map((m) => `**${m.from ?? ""}** · ${m.date ?? ""}\n\n${m.text ?? ""}`).join("\n\n---\n\n")
             })
           return true
         case "file":
@@ -155,7 +155,6 @@ export function App() {
       return ["r", "p", "a", "delete", "backspace"].includes(name)
     }
     if (name === "r") {
-      ctl.store.set({ chat: s.chat })
       ctl.openChat({ session_id: sid, title: cur.title }).then(() =>
         ctl.setOverlay({ kind: "prompt", title: "Rename chat", placeholder: "New title", initial: cur.title, action: "rename" }),
       )
@@ -179,7 +178,8 @@ export function App() {
     const s = store.get()
     const v = s.view as Exclude<View, "chat">
     const n = panelItems(s, v).length
-    const cur = s.selected[v]
+    // Data can shrink under a stored index (a refresh, a delete).
+    const cur = Math.min(s.selected[v], Math.max(0, n - 1))
     const set = (i: number) => store.set({ selected: { ...s.selected, [v]: Math.max(0, Math.min(n - 1, i)) } })
     if (name === "up" || name === "k") return set(cur - 1), true
     if (name === "down" || name === "j") return set(cur + 1), true

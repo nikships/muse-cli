@@ -1,7 +1,7 @@
 import { TextAttributes, type ScrollBoxRenderable } from "@opentui/core"
 import { useEffect, useMemo, useRef, type ReactNode } from "react"
 import { useApp, useS, useSyntaxStyle, useTick } from "../context"
-import { bytes, fileName, oneLine, truncate } from "../format"
+import { bytes, fileName, oneLine, plural, truncate, when } from "../format"
 import type { ChatFile, FeedUnit, Goal, Idea, MailThread, Task, TaskRun } from "../protocol"
 import { VIEWS, type State, type View } from "../store"
 import { gradientAt, theme } from "../theme"
@@ -174,7 +174,7 @@ function Row(props: { item: PanelItem; i: number; selected: boolean; width: numb
                 {t.title}
               </text>
               <box flexGrow={1} />
-              <text fg={theme.textMuted}>{t.next_run ? `next ${t.next_run}` : "paused"}</text>
+              <text fg={theme.textMuted}>{t.next_run ? `next ${when(t.next_run)}` : "paused"}</text>
             </box>
             <text fg={theme.textFaint}>{[t.schedule, t.mode, t.timezone].filter(Boolean).join(" · ")}</text>
           </Card>
@@ -188,7 +188,7 @@ function Row(props: { item: PanelItem; i: number; selected: boolean; width: numb
           {item.first ? <SectionTitle text="Recent runs" /> : null}
           <box id={id} flexDirection="row" height={1} backgroundColor={selected ? theme.card : undefined} onMouseDown={select} paddingX={1}>
             <text fg={statusColor(r.status)}>{`● ${(r.status ?? "?").padEnd(10)}`}</text>
-            <text fg={theme.textMuted}>{`${(r.scheduled ?? "").padEnd(17)}`}</text>
+            <text fg={theme.textMuted}>{`${when(r.scheduled).padEnd(20)}`}</text>
             <text fg={r.error ? theme.red : theme.textSoft}>{truncate(oneLine(r.error || r.summary || r.trigger || ""), w - 30)}</text>
           </box>
         </box>
@@ -196,16 +196,17 @@ function Row(props: { item: PanelItem; i: number; selected: boolean; width: numb
     }
     case "thread": {
       const t = item.v
+      const date = when(t.last_date, Date.now(), true)
       return (
         <Card id={id} selected={selected} onClick={() => (select(), ctl.openMailThread(t.id))}>
           <box flexDirection="row">
             <text fg="#FFFFFF" attributes={TextAttributes.BOLD} flexShrink={1}>
-              {truncate(t.subject || "(no subject)", w - 14)}
+              {truncate(t.subject || "(no subject)", w - date.length - 6)}
             </text>
             <box flexGrow={1} />
-            <text fg={theme.textFaint}>{t.last_date ?? ""}</text>
+            <text fg={theme.textFaint}>{date}</text>
           </box>
-          <text fg={theme.textMuted}>{truncate(`${t.last_from ?? ""}${t.messages ? `  ·  ${t.messages} messages` : ""}`, w)}</text>
+          <text fg={theme.textMuted}>{truncate(`${t.last_from ?? ""}${t.messages ? `  ·  ${plural(t.messages, "message")}` : ""}`, w)}</text>
           {t.preview ? <text fg={theme.textSoft}>{truncate(oneLine(t.preview), w)}</text> : null}
         </Card>
       )
@@ -246,8 +247,8 @@ function MailThreadPane() {
           <text fg="#FFFFFF" attributes={TextAttributes.BOLD}>
             {m.subject || "(no subject)"}
           </text>
-          <text fg={theme.textMuted}>{`${m.from ?? ""}  ·  ${m.date ?? ""}`}</text>
-          <markdown content={(m.text || "").slice(0, 6000)} syntaxStyle={style} conceal fg={theme.textSoft} />
+          <text fg={theme.textMuted}>{`${m.from ?? ""}  ·  ${when(m.date)}`}</text>
+          <markdown content={(m.text || "").slice(0, 6000)} syntaxStyle={style} internalBlockMode="top-level" conceal fg={theme.textSoft} />
           {m.attachments?.length ? (
             <text fg={theme.link}>{m.attachments.map((a) => `⎘ ${a.filename ?? `attachment ${a.index}`}`).join("   ")}</text>
           ) : null}
@@ -262,18 +263,19 @@ export function Panel(props: { view: Exclude<View, "chat">; width: number }) {
   const { store } = useApp()
   const state = useS((s) => s[view])
   const items = useMemo(() => panelItems(store.get(), view), [state, view])
-  const index = useS((s) => s.selected[view])
+  const stored = useS((s) => s.selected[view])
   const tick = useTick(80, state.status === "loading")
   const scroll = useRef<ScrollBoxRenderable>(null)
   const meta = VIEWS.find((v) => v.id === view)!
   const mailbox = useS((s) => s.mail.data?.mailbox)
   const split = view === "mail" && props.width >= MAIL_SPLIT
+  const count = items.length
+  const index = Math.min(stored, Math.max(0, count - 1))
 
   useEffect(() => {
     scroll.current?.scrollChildIntoView(`row-${index}`)
-  }, [index, items.length])
+  }, [index, items.length, view])
 
-  const count = items.length
   const listWidth = split ? Math.floor(props.width * 0.45) : props.width
   const sub =
     view === "mail" && mailbox

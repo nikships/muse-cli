@@ -1,6 +1,6 @@
 import { TextAttributes, type InputRenderable } from "@opentui/core"
 import { useKeyboard, useTerminalDimensions } from "@opentui/react"
-import { useMemo, useRef, useState } from "react"
+import { useMemo, useRef, useState, type ReactNode } from "react"
 import type { Controller } from "../controller"
 import { useApp, useRenderNode, useS, useSyntaxStyle, useTick } from "../context"
 import { fuzzyScore, truncate } from "../format"
@@ -8,11 +8,11 @@ import { VIEWS, type State } from "../store"
 import { gradientAt, theme } from "../theme"
 import { GradientText, Kbd, spinner } from "./common"
 
-type Cmd = { id: string; group: string; label: string; hint?: string; run: () => void }
+type Cmd = { id: string; group: string; icon?: string; label: string; hint?: string; run: () => void }
 
 export function paletteCommands(ctl: Controller, s: State): Cmd[] {
   const cmds: Cmd[] = []
-  VIEWS.forEach((v, i) => cmds.push({ id: `go-${v.id}`, group: "Go to", label: `${v.icon}  ${v.label}`, hint: `Alt+${i + 1}`, run: () => ctl.go(v.id) }))
+  VIEWS.forEach((v, i) => cmds.push({ id: `go-${v.id}`, group: "Go to", icon: v.icon, label: v.label, hint: `Alt+${i + 1}`, run: () => ctl.go(v.id) }))
   const sid = s.chat.session_id
   cmds.push(
     { id: "new", group: "Actions", label: "New chat", hint: "Ctrl+N", run: () => ctl.setOverlay({ kind: "prompt", title: "New chat", placeholder: "What's it about?", initial: "", action: "new_chat" }) },
@@ -50,7 +50,8 @@ export function paletteCommands(ctl: Controller, s: State): Cmd[] {
     cmds.push({
       id: `chat-${x.session_id ?? "main"}`,
       group: "Chats",
-      label: `${main ? "◆" : x.pinned ? "★" : "#"}  ${main ? "Main chat" : x.title || "untitled"}`,
+      icon: main ? "◆" : x.pinned ? "★" : "#",
+      label: main ? "Main chat" : x.title || "untitled",
       hint: x.unread ? `${x.unread} new` : undefined,
       run: () => ctl.openChat({ session_id: x.session_id, title: x.title }),
     })
@@ -58,7 +59,7 @@ export function paletteCommands(ctl: Controller, s: State): Cmd[] {
   return cmds
 }
 
-function Modal(props: { width: number; title?: string; children: any; borderColor?: string; top?: number }) {
+function Modal(props: { width: number; title?: string; children: ReactNode; borderColor?: string; top?: number }) {
   const dims = useTerminalDimensions()
   const w = Math.min(props.width, dims.width - 4)
   return (
@@ -83,15 +84,17 @@ function Modal(props: { width: number; title?: string; children: any; borderColo
 
 export function Palette(props: { query: string }) {
   const { ctl } = useApp()
-  const s = useS((x) => x)
+  const sessions = useS((x) => x.sessions)
+  const chat = useS((x) => x.chat)
+  const sidebarOpen = useS((x) => x.sidebarOpen)
   const [q, setQ] = useState(props.query)
   const [idx, setIdx] = useState(0)
   const dims = useTerminalDimensions()
-  const all = useMemo(() => paletteCommands(ctl, s), [ctl, s.sessions, s.chat, s.sidebarOpen])
+  const all = useMemo(() => paletteCommands(ctl, ctl.store.get()), [ctl, sessions, chat, sidebarOpen])
   const list = useMemo(() => {
     if (!q.trim()) return all
     return all
-      .map((c) => ({ c, score: fuzzyScore(q, c.label.replace(/^\S+\s+/, "") + " " + c.group) }))
+      .map((c) => ({ c, score: fuzzyScore(q, c.label + " " + c.group) }))
       .filter((x) => x.score >= 0)
       .sort((a, b) => b.score - a.score)
       .map((x) => x.c)
@@ -116,7 +119,6 @@ export function Palette(props: { query: string }) {
     }
   })
 
-  let lastGroup = ""
   return (
     <Modal width={72} title="Go anywhere">
       <box flexDirection="row" height={1} marginTop={1}>
@@ -141,8 +143,8 @@ export function Palette(props: { query: string }) {
       <box height={1} />
       {view.map((c, i) => {
         const on = start + i === sel
-        const header = !q.trim() && c.group !== lastGroup
-        lastGroup = c.group
+        const prev = start + i > 0 ? list[start + i - 1] : undefined
+        const header = !q.trim() && c.group !== prev?.group
         return (
           <box key={c.id} flexDirection="column">
             {header ? (
@@ -160,7 +162,8 @@ export function Palette(props: { query: string }) {
               }}
             >
               <text fg={on ? theme.metaBlue : theme.card}>{"▎"}</text>
-              <text fg={on ? "#FFFFFF" : theme.text}>{truncate(c.label, 52)}</text>
+              <text fg={on ? theme.metaBlue : theme.textMuted}>{`${c.icon ?? "›"}  `}</text>
+              <text fg={on ? "#FFFFFF" : theme.text}>{truncate(c.label, 49)}</text>
               <box flexGrow={1} />
               <text fg={on ? theme.textSoft : theme.textFaint}>{c.hint ?? (q.trim() ? c.group : "")}</text>
               <text>{" "}</text>
@@ -227,7 +230,7 @@ export function Confirm(props: { title: string; body: string; confirm: string; d
   })
   const color = props.danger ? theme.red : theme.metaBlue
   return (
-    <Modal width={58} title={props.title} borderColor={color} top={Math.max(2, 8)}>
+    <Modal width={58} title={props.title} borderColor={color} top={8}>
       <box height={1} />
       <text fg={theme.text} wrapMode="word">
         {props.body}
@@ -268,7 +271,7 @@ export function Detail(props: { title: string; subtitle?: string; body: string; 
         {props.loading ? (
           <text fg={theme.textMuted}>{`${spinner(tick)} loading…`}</text>
         ) : (
-          <markdown content={props.body || "_Nothing more to show._"} syntaxStyle={style} renderNode={renderNode} conceal fg={theme.text} />
+          <markdown content={props.body || "_Nothing more to show._"} syntaxStyle={style} renderNode={renderNode} internalBlockMode="top-level" conceal fg={theme.text} />
         )}
       </scrollbox>
       <box flexDirection="row" gap={2} marginTop={1}>

@@ -89,7 +89,7 @@ export function createFakeTransport(opts: FakeOptions = {}): Transport & { sent:
         })
         setTimeout(() => {
           const final = { ...msg(replySeq, "assistant", reply, 0), id, at_ms: Date.now() }
-          ;(data.messages[key()] ??= []).push(final)
+          ;(data.messages[sid ?? "main"] ??= []).push(final)
           emit({ event: "message", data: { session_id: sid, message: final } })
           emit({ event: "idle", data: { session_id: sid, replied: true } })
         }, delay * 3 + step * (words.length + 1))

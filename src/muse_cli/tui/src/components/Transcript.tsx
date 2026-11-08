@@ -11,9 +11,9 @@ const FILE_ICON: Record<string, string> = { image: "▣", video: "▶", audio: "
 
 function FileChips(props: { files: FileRef[] }) {
   const { ctl } = useApp()
-  if (!props.files.length) return null
+  if (!props.files?.length) return null
   return (
-    <box flexDirection="row" flexWrap="wrap" gap={1} paddingLeft={2} marginTop={0}>
+    <box flexDirection="row" flexWrap="wrap" gap={1} paddingLeft={2} marginTop={1}>
       {props.files.map((f) => {
         const kind = (f.kind ?? "file").replace(/s$/, "")
         const name = truncate(f.label || fileName(f.path), 36)
@@ -84,7 +84,7 @@ export const AssistantMessage = memo(function AssistantMessage(props: { m: Messa
       </box>
       {text ? (
         <box paddingLeft={2}>
-          <markdown content={props.streaming ? text + " ▍" : text} syntaxStyle={style} renderNode={renderNode} conceal streaming={!!props.streaming} fg={theme.text} />
+          <markdown content={props.streaming ? text + " ▍" : text} syntaxStyle={style} renderNode={renderNode} internalBlockMode="top-level" conceal streaming={!!props.streaming} fg={theme.text} />
         </box>
       ) : null}
       <FileChips files={m.files} />

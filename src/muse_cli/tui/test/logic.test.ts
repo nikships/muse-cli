@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import { Bridge, BridgeError, type Transport } from "../src/bridge"
 import { Controller, countUnread } from "../src/controller"
-import { ago, fuzzyScore, truncate } from "../src/format"
+import { ago, clock, fileName, fuzzyScore, parseDate, plural, truncate, when } from "../src/format"
 import { Store, mergeMessages } from "../src/store"
 import { createFakeTransport } from "./fake"
 
@@ -136,6 +136,30 @@ describe("Controller", () => {
     expect(store.get().messages).toEqual([])
   })
 
+  test("a slow detail never overwrites a newer one with the same title", async () => {
+    const store = new Store()
+    const ctl = new Controller(new Bridge(pipe().t), store)
+    let release = () => {}
+    const slow = ctl.showDetail("Same", undefined, () => new Promise<string>((r) => (release = () => r("old"))))
+    await ctl.showDetail("Same", undefined, async () => "new")
+    release()
+    await slow
+    expect((store.get().overlay as any).body).toBe("new")
+  })
+
+  test("a failed reaction puts the old one back", async () => {
+    const p = pipe()
+    const store = new Store()
+    const ctl = new Controller(new Bridge(p.t), store)
+    store.set({ feed: { status: "ready", data: [{ id: "u1", title: "t", reaction: "love" }] } })
+    const done = ctl.react("u1", "dislike")
+    expect(store.get().feed.data![0]!.reaction).toBe("dislike")
+    const req = JSON.parse(p.sent.at(-1)!)
+    p.push({ id: req.id, error: { kind: "gateway", message: "nope" } })
+    await done
+    expect(store.get().feed.data![0]!.reaction).toBe("love")
+  })
+
   test("opening a deleted chat falls back to the main chat", async () => {
     const store = new Store()
     const ctl = new Controller(new Bridge(createFakeTransport()), store)
@@ -169,6 +193,22 @@ describe("Controller", () => {
 })
 
 describe("helpers", () => {
+  test("when() reads server dates as local and says them like a person", () => {
+    const now = new Date(2026, 10, 8, 15, 0).getTime()
+    expect(parseDate("2026-11-08 12:09")).toBe(new Date(2026, 10, 8, 12, 9).getTime())
+    expect(parseDate("2026-11-08")).toBe(new Date(2026, 10, 8).getTime())
+    expect(parseDate("soon")).toBeNull()
+    expect(when("2026-11-08 12:09", now)).toBe(clock(new Date(2026, 10, 8, 12, 9).getTime()))
+    expect(when("2026-11-09 09:00", now)).toBe(`Tomorrow, ${clock(new Date(2026, 10, 9, 9).getTime())}`)
+    expect(when("2026-11-07 18:20", now, true)).toBe("Yesterday")
+    expect(when("2026-10-02", now)).toBe(new Date(2026, 9, 2).toLocaleDateString([], { month: "short", day: "numeric" }))
+    expect(when("every Monday", now)).toBe("every Monday")
+    expect(plural(1, "message")).toBe("1 message")
+    expect(plural(3, "message")).toBe("3 messages")
+    expect(fileName("sandbox://workspace/100%25%20done.png")).toBe("100% done.png")
+    expect(fileName("sandbox://workspace/100% done.png")).toBe("100% done.png")
+  })
+
   test("mergeMessages dedupes by seq and keeps order", () => {
     const m = (seq: number, text = "") => ({ seq, id: String(seq), role: "user" as const, text, at_ms: 0, final: true, push: false, files: [] })
     expect(mergeMessages([m(3), m(1)], [m(2), m(3, "new")]).map((x) => [x.seq, x.text])).toEqual([

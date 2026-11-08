@@ -34,14 +34,6 @@ export function Kbd(props: { k: string; label?: string; dim?: boolean }) {
   )
 }
 
-export function Pill(props: { text: string; fg?: string; bg?: string }) {
-  return (
-    <text selectable={false}>
-      <span fg={props.fg ?? theme.text} bg={props.bg ?? theme.raised}>{` ${props.text} `}</span>
-    </text>
-  )
-}
-
 export function statusColor(status?: string): string {
   const s = (status ?? "").toLowerCase()
   if (/(done|complete|succe|achiev|ok|active|enabled|on_track)/.test(s)) return theme.green

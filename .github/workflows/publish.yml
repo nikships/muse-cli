@@ -70,7 +70,9 @@ jobs:
           /tmp/smoke/bin/muse-cli --help
           /tmp/smoke/bin/muse-cli chat --help
           /tmp/smoke/bin/muse-cli tui --help
-          test -f "$(/tmp/smoke/bin/python -c 'import muse_cli.tui as t; print(t.APP_DIR)')/bun.lock"
+          app=$(/tmp/smoke/bin/python -c 'import muse_cli.tui as t; print(t.APP_DIR)')
+          for f in package.json bun.lock tsconfig.json src/main.tsx; do test -f "$app/$f"; done
+          test ! -e "$app/node_modules"
 
       - uses: actions/upload-artifact@v7
         with:
@@ -85,16 +87,19 @@ jobs:
   app:
     name: Test the full-screen app
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     defaults:
       run:
         working-directory: src/muse_cli/tui
     steps:
       - uses: actions/checkout@v7
         with:
+          # Same tree as the build job, so a release never skips these tests.
+          ref: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' && 'main' || github.ref }}
           persist-credentials: false
       - uses: oven-sh/setup-bun@v2
         with:
-          bun-version: latest
+          bun-version: "1.4.3"
       - run: bun install --frozen-lockfile
       - run: bunx tsc --noEmit
       - run: bun test
@@ -132,9 +137,9 @@ jobs:
 
   publish:
     name: Publish to PyPI
-    needs: [build, record-release]
+    needs: [build, app, record-release]
     if: >-
-      ${{ !cancelled() && needs.build.result == 'success' &&
+      ${{ !cancelled() && needs.build.result == 'success' && needs.app.result == 'success' &&
       (needs.record-release.result == 'success' ||
        (needs.record-release.result == 'skipped' && startsWith(github.ref, 'refs/tags/v'))) }}
     runs-on: ubuntu-latest
