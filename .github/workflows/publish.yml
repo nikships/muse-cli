@@ -69,6 +69,8 @@ jobs:
           /tmp/smoke/bin/muse-cli --version
           /tmp/smoke/bin/muse-cli --help
           /tmp/smoke/bin/muse-cli chat --help
+          /tmp/smoke/bin/muse-cli tui --help
+          test -f "$(/tmp/smoke/bin/python -c 'import muse_cli.tui as t; print(t.APP_DIR)')/bun.lock"
 
       - uses: actions/upload-artifact@v7
         with:
@@ -80,9 +82,26 @@ jobs:
           name: release-version
           path: src/muse_cli/__init__.py
 
+  app:
+    name: Test the full-screen app
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: src/muse_cli/tui
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+      - run: bun install --frozen-lockfile
+      - run: bunx tsc --noEmit
+      - run: bun test
+
   record-release:
     name: Commit version and tag
-    needs: build
+    needs: [build, app]
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     permissions:
