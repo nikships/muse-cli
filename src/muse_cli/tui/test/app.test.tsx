@@ -96,6 +96,22 @@ describe("App", () => {
     expect(store.get().view).toBe("feed")
   })
 
+  test("renaming from the chat list stays in the list and keeps the open chat", async () => {
+    const { setup: s, frame, store } = await mount()
+    await frame((x) => x.includes("Trip to Lisbon"))
+    s.mockInput.pressTab()
+    await frame(() => store.get().focus === "sidebar")
+    s.mockInput.pressArrow("down")
+    s.mockInput.pressKey("r")
+    await frame((x) => x.includes("Rename chat"))
+    for (let i = 0; i < "Trip to Lisbon".length; i++) s.mockInput.pressBackspace()
+    await s.mockInput.typeText("Porto instead")
+    s.mockInput.pressEnter()
+    await frame((x) => x.includes("Porto instead") && !x.includes("Rename chat"))
+    expect(store.get().focus).toBe("sidebar")
+    expect(store.get().chat.session_id).toBeNull()
+  })
+
   test("a feature the account lacks shows a calm notice, not a retry", async () => {
     const { setup: s, frame } = await mount(120, 36, { mailOff: true })
     await frame((x) => x.includes("Message your Muse"))
@@ -125,6 +141,20 @@ describe("App", () => {
     const { frame } = await mount(60, 24)
     const f = await frame((x) => x.includes("Message your Muse"))
     expect(f).not.toContain("CHATS")
+  })
+
+  test("an 80-column terminal hides the chat list until Tab peeks at it", async () => {
+    const { setup: s, frame, store } = await mount(80, 24)
+    await frame((x) => x.includes("Message your Muse"))
+    expect(s.captureCharFrame()).not.toContain("CHATS")
+    s.mockInput.pressTab()
+    await frame((x) => x.includes("CHATS"))
+    expect(store.get().focus).toBe("sidebar")
+    s.mockInput.pressTab()
+    await frame((x) => !x.includes("CHATS"))
+    s.mockInput.pressKey("b", { ctrl: true })
+    await frame((x) => x.includes("CHATS"))
+    expect(store.get().sidebarOpen).toBe(true)
   })
 
   test("the sign-in screen appears without a login", async () => {

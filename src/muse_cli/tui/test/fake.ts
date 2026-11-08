@@ -33,7 +33,7 @@ export function fakeData() {
   return { sessions, messages }
 }
 
-export function createFakeTransport(opts: FakeOptions = {}): Transport & { sent: any[] } {
+export function createFakeTransport(opts: FakeOptions = {}): Transport & { sent: any[]; emitEvent: (event: string, data: unknown) => void } {
   const data = fakeData()
   let active: string | null = null
   let seq = 100
@@ -149,6 +149,7 @@ export function createFakeTransport(opts: FakeOptions = {}): Transport & { sent:
 
   return {
     sent,
+    emitEvent: (event, data) => emit({ event, data }),
     send(line) {
       const req = JSON.parse(line)
       sent.push(req)

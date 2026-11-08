@@ -35,7 +35,7 @@ export type Overlay =
   | null
   | { kind: "palette"; query: string }
   | { kind: "help" }
-  | { kind: "prompt"; title: string; placeholder: string; initial: string; action: "new_chat" | "rename" }
+  | { kind: "prompt"; title: string; placeholder: string; initial: string; action: "new_chat" | "rename"; target?: string }
   | { kind: "confirm"; title: string; body: string; confirm: string; danger?: boolean; run: () => void }
   | { kind: "detail"; title: string; subtitle?: string; body: string; loading?: boolean }
 
@@ -62,7 +62,10 @@ export type State = {
   pending: Pending[]
   view: View
   focus: "composer" | "sidebar" | "list"
-  sidebarOpen: boolean
+  /** null follows the terminal width; Ctrl+B pins it open or shut. */
+  sidebarOpen: boolean | null
+  /** Shown just while it has focus, on a terminal too narrow to keep it. */
+  sidebarPeek: boolean
   sidebarIndex: number
   overlay: Overlay
   toasts: Toast[]
@@ -76,6 +79,15 @@ export type State = {
   files: Loadable<ChatFile[]>
   selected: Record<View, number>
   loginBusy: boolean
+}
+
+// Below SIDEBAR_AUTO columns the chat list hides unless asked for; below SIDEBAR_MIN it never fits.
+export const SIDEBAR_AUTO = 100
+export const SIDEBAR_MIN = 60
+
+export function sidebarVisible(s: Pick<State, "sidebarOpen" | "sidebarPeek">, width: number): boolean {
+  if (width < SIDEBAR_MIN) return false
+  return s.sidebarPeek || (s.sidebarOpen ?? width >= SIDEBAR_AUTO)
 }
 
 export function initialState(): State {
@@ -98,7 +110,8 @@ export function initialState(): State {
     pending: [],
     view: "chat",
     focus: "composer",
-    sidebarOpen: true,
+    sidebarOpen: null,
+    sidebarPeek: false,
     sidebarIndex: 0,
     overlay: null,
     toasts: [],

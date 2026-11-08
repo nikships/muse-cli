@@ -2,7 +2,7 @@ import type { ScrollBoxRenderable } from "@opentui/core"
 import { useKeyboard, useTerminalDimensions } from "@opentui/react"
 import { useEffect, useRef } from "react"
 import { useApp, useS } from "./context"
-import { VIEWS, type View } from "./store"
+import { SIDEBAR_MIN, VIEWS, sidebarVisible, type View } from "./store"
 import { theme } from "./theme"
 import { Kbd } from "./components/common"
 import { Composer, type ComposerHandle } from "./components/Composer"
@@ -18,15 +18,16 @@ function StatusBar(props: { width: number }) {
   const view = useS((s) => s.view)
   const awaiting = useS((s) => s.awaiting)
   const narrow = props.width < 90
+  const tiny = props.width < 60
   return (
     <box height={1} flexDirection="row" backgroundColor={theme.surface} paddingX={1} flexShrink={0} gap={2}>
-      <Kbd k="^K" label={narrow ? "" : "go anywhere"} dim />
-      <Kbd k="Tab" label={narrow ? "" : focus === "sidebar" ? "back" : "chats"} dim />
+      <Kbd k="^K" label={tiny ? "" : narrow ? "go" : "go anywhere"} dim />
+      <Kbd k="Tab" label={tiny ? "" : focus === "sidebar" ? "back" : "chats"} dim />
       {view === "chat" && !narrow ? <Kbd k="/" label="commands" dim /> : null}
       {!narrow ? <Kbd k="^N" label="new chat" dim /> : null}
       <box flexGrow={1} />
       {awaiting ? <text fg={theme.textMuted}>{narrow ? "replying…" : "your Muse is replying…"}</text> : null}
-      <Kbd k="F1" label={narrow ? "" : "help"} dim />
+      <Kbd k="F1" label={tiny ? "" : "help"} dim />
     </box>
   )
 }
@@ -55,15 +56,17 @@ export function App() {
   const focus = useS((s) => s.focus)
   const overlay = useS((s) => s.overlay)
   const sidebarOpen = useS((s) => s.sidebarOpen)
+  const sidebarPeek = useS((s) => s.sidebarPeek)
   const dims = useTerminalDimensions()
   const transcript = useRef<ScrollBoxRenderable>(null)
   const composer = useRef<ComposerHandle>(null)
-  const showSidebar = sidebarOpen && dims.width >= 70
+  const showSidebar = sidebarVisible({ sidebarOpen, sidebarPeek }, dims.width)
   const mainWidth = dims.width - (showSidebar ? SIDEBAR_WIDTH : 0)
 
   useEffect(() => {
     if (!showSidebar && focus === "sidebar") store.set({ focus: view === "chat" ? "composer" : "list" })
-  }, [showSidebar, focus, view])
+    if (sidebarPeek && focus !== "sidebar") store.set({ sidebarPeek: false })
+  }, [showSidebar, focus, view, sidebarPeek])
 
   async function pageUp() {
     const sb = transcript.current
@@ -162,15 +165,13 @@ export function App() {
       return ["r", "p", "a", "delete", "backspace"].includes(name)
     }
     if (name === "r") {
-      ctl.openChat({ session_id: sid, title: cur.title }).then(() =>
-        ctl.setOverlay({ kind: "prompt", title: "Rename chat", placeholder: "New title", initial: cur.title, action: "rename" }),
-      )
+      ctl.setOverlay({ kind: "prompt", title: "Rename chat", placeholder: "New title", initial: cur.title, action: "rename", target: sid })
       return true
     }
     if (name === "p") return ctl.sessionOp(cur.pinned ? "unpin" : "pin", sid), true
     if (name === "a")
       return (
-        ctl.setOverlay({ kind: "confirm", title: "Archive this chat?", body: `“${cur.title}” moves out of your list. You can restore it on muse.ai.`, confirm: "Archive", run: () => ctl.sessionOp("archive", sid) }),
+        ctl.setOverlay({ kind: "confirm", title: "Archive this chat?", body: `“${cur.title}” moves out of your list. Ctrl+Z right after brings it back; later, restore it on muse.ai.`, confirm: "Archive", run: () => ctl.sessionOp("archive", sid) }),
         true
       )
     if (name === "delete" || (name === "backspace" && shift) || name === "x")
@@ -225,7 +226,8 @@ export function App() {
     }
     if (key.ctrl && (name === "k" || name === "p")) return done(), ctl.setOverlay({ kind: "palette", query: "" })
     if (key.ctrl && name === "n") return done(), ctl.setOverlay({ kind: "prompt", title: "New chat", placeholder: "What's it about?", initial: "", action: "new_chat" })
-    if (key.ctrl && name === "b") return done(), store.set({ sidebarOpen: !s.sidebarOpen })
+    if (key.ctrl && name === "b") return done(), store.set({ sidebarOpen: !showSidebar, sidebarPeek: false })
+    if (key.ctrl && name === "z" && ctl.canUndo()) return done(), void ctl.undoArchive()
     if (name === "f1") return done(), ctl.setOverlay({ kind: "help" })
     const digit = /^[1-7]$/.test(name) ? Number(name) : 0
     if (digit && (key.meta || key.option || s.focus !== "composer")) return done(), ctl.go(VIEWS[digit - 1]!.id)
@@ -235,6 +237,7 @@ export function App() {
       done()
       if (s.focus === "sidebar") return store.set({ focus: s.view === "chat" ? "composer" : "list" })
       if (showSidebar) return store.set({ focus: "sidebar" })
+      if (dims.width >= SIDEBAR_MIN) return store.set({ sidebarPeek: true, focus: "sidebar" })
       return
     }
     if (s.focus === "sidebar") {

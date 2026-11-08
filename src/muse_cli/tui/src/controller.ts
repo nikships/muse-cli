@@ -52,7 +52,11 @@ export class Controller {
       }),
       b.on("unread", (d: any) => {
         const n = countUnread(d)
-        if (n !== null) this.store.set({ unread: n })
+        if (n === null) return
+        const changed = n !== this.s.unread
+        this.store.set({ unread: n })
+        // A reply in a side chat you aren't viewing only shows up as this count; refresh the list's badges.
+        if (changed && this.s.phase === "ready") this.refreshSessions()
       }),
       b.on("log", (d) => this.toast(d.text, d.level === "error" ? "error" : "info")),
       b.on("exit", () => {
@@ -144,7 +148,7 @@ export class Controller {
       const idx = res.sessions.findIndex((x) => (x.session_id ?? null) === (this.s.chat.session_id ?? null))
       this.store.set((s) => ({
         sessions: { status: "ready", data: res.sessions, at: Date.now() },
-        sidebarIndex: s.focus === "sidebar" ? s.sidebarIndex : Math.max(0, idx),
+        sidebarIndex: s.focus === "sidebar" ? Math.min(s.sidebarIndex, Math.max(0, res.sessions.length - 1)) : Math.max(0, idx),
       }))
     } catch (e) {
       this.store.set((s) => ({ sessions: { ...s.sessions, status: "error", error: errText(e) } }))
@@ -260,7 +264,7 @@ export class Controller {
         this.openChat({ session_id: null, title: "main chat" })
         return true
       case "chats":
-        this.store.set({ sidebarOpen: true, focus: "sidebar" })
+        this.store.set({ sidebarPeek: true, focus: "sidebar" })
         return true
       case "rename":
         if (!this.s.chat.session_id) {
@@ -299,11 +303,28 @@ export class Controller {
     }
   }
 
+  // The chat list never shows archived chats, so an archive is only undoable right away.
+  private archived: { sid: string; until: number } | null = null
+
+  canUndo() {
+    return !!this.archived && Date.now() < this.archived.until
+  }
+
+  async undoArchive() {
+    if (!this.canUndo()) return
+    const sid = this.archived!.sid
+    this.archived = null
+    await this.sessionOp("unarchive", sid)
+  }
+
   async sessionOp(op: "rename" | "pin" | "unpin" | "archive" | "unarchive" | "delete", sessionId: string, title?: string) {
     try {
       await this.bridge.request("session_op", { op, session_id: sessionId, title })
       const verb = { rename: "Renamed", pin: "Pinned", unpin: "Unpinned", archive: "Archived", unarchive: "Restored", delete: "Deleted" }[op]
-      this.toast(verb, "success")
+      if (op === "archive") {
+        this.archived = { sid: sessionId, until: Date.now() + 10_000 }
+        this.toast("Archived. Press Ctrl+Z to undo.", "success")
+      } else this.toast(verb, "success")
       if ((op === "delete" || op === "archive") && sessionId === this.s.chat.session_id) {
         await this.openChat({ session_id: null, title: "main chat" })
       } else if (op === "rename" && sessionId === this.s.chat.session_id && title) {

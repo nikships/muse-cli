@@ -142,6 +142,35 @@ describe("Controller", () => {
     expect(store.get().thinkingSince).toBeNull()
   })
 
+  test("a new unread count refreshes the chat list badges", async () => {
+    const store = new Store()
+    const fake = createFakeTransport()
+    const ctl = new Controller(new Bridge(fake), store)
+    await ctl.boot()
+    await until(() => store.get().sessions.status === "ready")
+    const lists = () => fake.sent.filter((r) => r.method === "sessions").length
+    const before = lists()
+    fake.emitEvent("unread", { unread_count: 5 })
+    await until(() => lists() > before)
+    fake.emitEvent("unread", { unread_count: 5 })
+    await Bun.sleep(30)
+    expect(lists()).toBe(before + 1)
+  })
+
+  test("an archive can be undone right away", async () => {
+    const store = new Store()
+    const fake = createFakeTransport()
+    const ctl = new Controller(new Bridge(fake), store)
+    await ctl.boot()
+    expect(ctl.canUndo()).toBe(false)
+    await ctl.sessionOp("archive", "s-bread")
+    expect(ctl.canUndo()).toBe(true)
+    await ctl.undoArchive()
+    expect(ctl.canUndo()).toBe(false)
+    const ops = fake.sent.filter((r) => r.method === "session_op").map((r) => r.params.op)
+    expect(ops).toEqual(["archive", "unarchive"])
+  })
+
   test("events for another chat are ignored", async () => {
     const p = pipe()
     const store = new Store()

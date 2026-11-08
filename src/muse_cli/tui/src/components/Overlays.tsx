@@ -4,13 +4,14 @@ import { useMemo, useRef, useState, type ReactNode } from "react"
 import type { Controller } from "../controller"
 import { useApp, useRenderNode, useS, useSyntaxStyle, useTick } from "../context"
 import { fuzzyScore, truncate } from "../format"
-import { VIEWS, type State } from "../store"
+import { VIEWS, sidebarVisible, type State } from "../store"
 import { gradientAt, theme } from "../theme"
 import { GradientText, Kbd, spinner } from "./common"
 
 type Cmd = { id: string; group: string; icon?: string; label: string; hint?: string; run: () => void }
 
-export function paletteCommands(ctl: Controller, s: State): Cmd[] {
+export function paletteCommands(ctl: Controller, s: State, width = 120): Cmd[] {
+  const shown = sidebarVisible(s, width)
   const cmds: Cmd[] = []
   VIEWS.forEach((v, i) => cmds.push({ id: `go-${v.id}`, group: "Go to", icon: v.icon, label: v.label, hint: `Alt+${i + 1}`, run: () => ctl.go(v.id) }))
   const sid = s.chat.session_id
@@ -27,7 +28,7 @@ export function paletteCommands(ctl: Controller, s: State): Cmd[] {
         id: "archive",
         group: "Actions",
         label: "Archive this chat",
-        run: () => ctl.setOverlay({ kind: "confirm", title: "Archive this chat?", body: `“${s.chat.title}” moves out of your list. You can restore it on muse.ai.`, confirm: "Archive", run: () => ctl.sessionOp("archive", sid) }),
+        run: () => ctl.setOverlay({ kind: "confirm", title: "Archive this chat?", body: `“${s.chat.title}” moves out of your list. Ctrl+Z right after brings it back; later, restore it on muse.ai.`, confirm: "Archive", run: () => ctl.sessionOp("archive", sid) }),
       },
       {
         id: "delete",
@@ -39,7 +40,7 @@ export function paletteCommands(ctl: Controller, s: State): Cmd[] {
   }
   cmds.push(
     { id: "older", group: "Actions", label: "Load older messages", run: () => (ctl.go("chat"), ctl.loadOlder()) },
-    { id: "sidebar", group: "Actions", label: s.sidebarOpen ? "Hide the chat list" : "Show the chat list", hint: "Ctrl+B", run: () => ctl.store.set({ sidebarOpen: !s.sidebarOpen }) },
+    { id: "sidebar", group: "Actions", label: shown ? "Hide the chat list" : "Show the chat list", hint: "Ctrl+B", run: () => ctl.store.set({ sidebarOpen: !shown, sidebarPeek: false }) },
     { id: "refresh", group: "Actions", label: "Refresh chats", run: () => ctl.refreshSessions() },
     { id: "login", group: "Actions", label: "Sign in again from the browser", run: () => ctl.login() },
     { id: "help", group: "Actions", label: "Keys and commands", hint: "F1", run: () => ctl.setOverlay({ kind: "help" }) },
@@ -90,7 +91,7 @@ export function Palette(props: { query: string }) {
   const [q, setQ] = useState(props.query)
   const [idx, setIdx] = useState(0)
   const dims = useTerminalDimensions()
-  const all = useMemo(() => paletteCommands(ctl, ctl.store.get()), [ctl, sessions, chat, sidebarOpen])
+  const all = useMemo(() => paletteCommands(ctl, ctl.store.get(), dims.width), [ctl, sessions, chat, sidebarOpen, dims.width])
   const list = useMemo(() => {
     if (!q.trim()) return all
     return all
@@ -181,14 +182,15 @@ export function Palette(props: { query: string }) {
   )
 }
 
-export function Prompt(props: { title: string; placeholder: string; initial: string; action: "new_chat" | "rename" }) {
+export function Prompt(props: { title: string; placeholder: string; initial: string; action: "new_chat" | "rename"; target?: string }) {
   const { ctl } = useApp()
   const chat = useS((s) => s.chat)
   const ref = useRef<InputRenderable>(null)
   const submit = (v: string) => {
     ctl.setOverlay(null)
+    const target = props.target ?? chat.session_id
     if (props.action === "new_chat") ctl.newChat(v.trim())
-    else if (props.action === "rename" && chat.session_id && v.trim()) ctl.sessionOp("rename", chat.session_id, v.trim())
+    else if (props.action === "rename" && target && v.trim() && v.trim() !== props.initial) ctl.sessionOp("rename", target, v.trim())
   }
   return (
     <Modal width={60} title={props.title}>
@@ -312,6 +314,7 @@ const HELP: [string, [string, string][]][] = [
       ["↑↓ ↵", "move, open"],
       ["n  r  p", "new, rename, pin or unpin"],
       ["a  Del", "archive, delete"],
+      ["Ctrl+Z", "undo an archive, right after"],
     ],
   ],
 ]

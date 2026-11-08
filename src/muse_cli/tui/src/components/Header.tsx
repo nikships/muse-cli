@@ -28,12 +28,13 @@ export function Header(props: { width: number }) {
       <box flexDirection="row" flexGrow={1} gap={0} overflow="hidden">
         {VIEWS.map((v) => {
           const on = v.id === view
-          const label = compact ? v.icon : ` ${v.icon} ${v.label} `
+          // Compact keeps the label on the open tab only, so you still see where you are.
+          const label = compact && !on ? ` ${v.icon} ` : ` ${v.icon} ${v.label} `
           return (
             <box key={v.id} onMouseDown={() => ctl.go(v.id)} flexShrink={0}>
               <text selectable={false}>
                 <span fg={on ? "#FFFFFF" : theme.textMuted} bg={on ? theme.metaBlue : undefined}>
-                  {compact ? ` ${label} ` : label}
+                  {label}
                 </span>
                 <span>{" "}</span>
               </text>

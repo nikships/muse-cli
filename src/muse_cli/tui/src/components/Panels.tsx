@@ -231,7 +231,7 @@ function Row(props: { item: PanelItem; i: number; selected: boolean; width: numb
                 {taskName(t)}
               </text>
               <box flexGrow={1} />
-              <text fg={theme.textMuted}>{taskState(t)}</text>
+              <text fg={theme.textMuted} flexShrink={0}>{`  ${taskState(t)}`}</text>
             </box>
             <text fg={theme.textFaint}>
               {[cadence(t.schedule), t.schedule?.startsWith("interval@") ? "" : zone(t.timezone), t.mode === "task" || t.mode === "heartbeat" ? "" : t.mode]
