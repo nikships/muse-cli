@@ -92,15 +92,23 @@ so its `Session` opens with `open` as is.
  "text": "markdown text", "at_ms": 1794117896436,
  "final": true, "push": false,
  "files": [{"path": "sandbox://…", "kind": "image", "mime": "image/png",
-            "label": "…", "byte_len": 1234}]}
+            "label": "…", "byte_len": 1234}],
+ "choices": [{"id": "widget-…", "options": ["Yes", "Not now"], "selected": null}]}
 ```
 
 - `at_ms` is `occurred_at_ms` (fallback `display_text_updated_at_ms`).
 - `final` is false while the assistant is still writing (no `status`).
 - `push` is true for proactive assistant messages (non-empty
   `reply_to_message_id`, same rule as `cli.is_reply`).
-- Only `message.user` and `message.assistant` events with text or files
-  become messages.
+- Only `message.user` and `message.assistant` events with text, files or
+  choices become messages.
+- `choices` come from `payload.widgets` of kind `option` (quick replies);
+  `selected` is `state.data.selectedText`. Their `[hatch_widget:…]` or
+  `[[hatch_widget:…]]` placeholder is removed from `text`. The app sends a
+  picked option as a normal message.
+- A user's own uploads come from `payload.metadata.attachments` (a bare
+  `workspace/…` path, given a `sandbox://` prefix), and their
+  `[image:<mime> <path>]` placeholder is removed from `text`.
 
 ### Events
 

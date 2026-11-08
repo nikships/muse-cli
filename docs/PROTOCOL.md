@@ -86,6 +86,15 @@ chat / feed / goals / ideas / sessions / ...
   not in `routes.json`; sent as a raw-path daemon request over the Noise
   tunnel it returns the file (body chunks). `Gateway.download_file()` wraps
   this. `artifacts.fetch_url` is unrelated (needs `project_dir`).
+- **User uploads** (a photo sent from the phone app): the text is
+  `[image:<mime> workspace/<p>]` and `payload.metadata.attachments[]` has
+  `{path: "workspace/<p>", mime_type, filename, bytes_len, width, height}`.
+  The bare path downloads like an agent file as `sandbox://workspace/<p>`.
+- **Quick-reply widgets**: the text holds `[hatch_widget:<widget_id>]` (or
+  `[[hatch_widget:<widget_id>]]`) and `payload.widgets[]` has
+  `{widget_id, kind: "option", data: {options: [...]}, fallback_text,
+  state: {data: {selectedText}, version}}`. `widgets.state.set` and
+  `widgets.state.patch` exist in `routes.json` but are not mapped yet.
 - `session.start`: `{method: "/api/session/start", params: {origin: "fresh",
   lifecycle: "persistent"}}`. A `title` param is accepted but ignored (the
   chat stays untitled), so `start_session` follows up with `session.rename`.

@@ -128,6 +128,19 @@ describe("Controller", () => {
     expect(new Set(s.messages.map((m) => m.seq)).size).toBe(s.messages.length)
   })
 
+  test("the reply landing ends the replying state before the bridge goes idle", async () => {
+    const p = pipe()
+    const store = new Store()
+    new Controller(new Bridge(p.t), store)
+    p.push({ event: "thinking", data: { session_id: null, since_ms: 1 } })
+    expect(store.get().awaiting).toBe(true)
+    p.push({ event: "message", data: { session_id: null, message: { seq: 2, id: "b", role: "assistant", text: "x", at_ms: 1, final: true, push: true, files: [] } } })
+    expect(store.get().awaiting).toBe(true)
+    p.push({ event: "message", data: { session_id: null, message: { seq: 3, id: "c", role: "assistant", text: "y", at_ms: 1, final: true, push: false, files: [] } } })
+    expect(store.get().awaiting).toBe(false)
+    expect(store.get().thinkingSince).toBeNull()
+  })
+
   test("events for another chat are ignored", async () => {
     const p = pipe()
     const store = new Store()

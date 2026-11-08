@@ -18,6 +18,9 @@ export type FileRef = {
   byte_len?: number
 }
 
+/** Quick replies the agent offered; `selected` is the one already picked, if any. */
+export type Choice = { id: string; options: string[]; selected: string | null }
+
 export type Message = {
   seq: number
   id: string
@@ -27,6 +30,7 @@ export type Message = {
   final: boolean
   push: boolean
   files: FileRef[]
+  choices?: Choice[]
 }
 
 export type ConnectionState = "connecting" | "online" | "offline" | "auth_needed"

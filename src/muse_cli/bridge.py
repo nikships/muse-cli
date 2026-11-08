@@ -9,6 +9,7 @@ import io
 import json
 import os
 import queue
+import re
 import sys
 import threading
 import time
@@ -42,6 +43,40 @@ def _payload(ev):
     return ev.get("payload") if isinstance(ev.get("payload"), dict) else {}
 
 
+# Placeholders the web app swaps for UI: an inline widget, and a file the user attached.
+_WIDGET_RE = re.compile(r"[ \t]*\[\[?hatch_widget:[^\]\s]+\]\]?")
+_UPLOAD_RE = re.compile(r"[ \t]*\[(?:image|video|audio|file|document):[^\]\s]+ [^\]]+\]")
+
+
+def uploads(p):
+    meta = p.get("metadata") if isinstance(p.get("metadata"), dict) else {}
+    rows = []
+    for a in meta.get("attachments") or []:
+        path = a.get("path") if isinstance(a, dict) else None
+        if not isinstance(path, str) or not path:
+            continue
+        mime = a.get("mime_type") or ""
+        rows.append({"path": path if "://" in path else "sandbox://" + path.lstrip("/"),
+                     "kind": mime.split("/")[0] if mime.split("/")[0] in ("image", "video", "audio") else "file",
+                     "mime": mime or None, "label": a.get("filename"), "byte_len": a.get("bytes_len")})
+    return rows
+
+
+def choices(p):
+    """Option widgets (quick replies) attached to a message."""
+    rows = []
+    for w in p.get("widgets") or []:
+        if not isinstance(w, dict) or w.get("kind") != "option":
+            continue
+        opts = [o for o in (w.get("data") or {}).get("options") or [] if isinstance(o, str) and o]
+        if not opts:
+            continue
+        picked = ((w.get("state") or {}).get("data") or {}).get("selectedText")
+        rows.append({"id": w.get("widget_id"), "options": opts,
+                     "selected": picked if isinstance(picked, str) and picked else None})
+    return rows
+
+
 def to_message(ev):
     """Map one chat.history event to a protocol Message, or None."""
     name = ev.get("event_name")
@@ -50,17 +85,27 @@ def to_message(ev):
     p = _payload(ev)
     row = cli.fmt_event(ev)
     files = [{k: r.get(k) for k in FILE_KEYS[2:]} for r in cli.event_resources(ev)]
-    if not row["text"] and not files:
+    for f in uploads(p):
+        if f["path"] not in [x["path"] for x in files]:
+            files.append(f)
+    picks = choices(p)
+    text = row["text"] or ""
+    if picks:
+        text = _WIDGET_RE.sub("", text)
+    if files:
+        text = _UPLOAD_RE.sub("", text)
+    text = text.strip()
+    if not text and not files and not picks:
         return None
     assistant = name == "message.assistant"
     return {"seq": ev.get("seq"), "id": row["message_id"],
-            "role": "assistant" if assistant else "user", "text": row["text"],
+            "role": "assistant" if assistant else "user", "text": text,
             "at_ms": (ev.get("occurred_at_ms") or ev.get("display_text_updated_at_ms")
                       or p.get("display_text_updated_at_ms")),
             # An assistant reply still being written has no status yet.
             "final": not assistant or bool(p.get("status")),
             "push": assistant and bool(ev.get("reply_to_message_id") or p.get("reply_to_message_id")),
-            "files": files}
+            "files": files, "choices": picks}
 
 
 def server_reason(e):
@@ -108,8 +153,10 @@ def sort_sessions(rows):
 
 
 def chat_of(session_id, title=None):
-    return {"session_id": session_id,
-            "title": title or ("main chat" if session_id is None else "untitled")}
+    # The server titles the main chat after its latest topic; it is always "main chat" here.
+    if session_id is None:
+        return {"session_id": None, "title": "main chat"}
+    return {"session_id": session_id, "title": title or "untitled"}
 
 
 def _str(p, key, required=True):

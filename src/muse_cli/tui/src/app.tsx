@@ -69,9 +69,13 @@ export function App() {
     const sb = transcript.current
     if (!sb) return
     if (sb.scrollTop <= 0) {
-      const before = sb.scrollHeight
+      // Pin the oldest message in place while the older page lands above it. React
+      // commits the new rows a frame or two after the store changes, so hold the
+      // anchor briefly rather than releasing it on the next layout.
+      const first = sb.content.getChildren().find((c) => c.id.startsWith("msg-"))
+      const release = first ? sb.anchor(first) : null
       await ctl.loadOlder()
-      sb.afterLayout(() => sb.scrollTo(Math.max(0, sb.scrollHeight - before)))
+      if (release) setTimeout(() => sb.isDestroyed || sb.afterLayout(release), 250)
     } else sb.scrollBy(-Math.max(3, Math.floor(sb.viewport.height * 0.8)))
   }
 

@@ -96,7 +96,35 @@ class MessageMappingTest(unittest.TestCase):
                              "text": "Here", "at_ms": 1794117896005, "final": True,
                              "push": False,
                              "files": [{"path": "sandbox://workspace/cat.png", "kind": "image",
-                                        "mime": "image/png", "label": "cat", "byte_len": 123}]})
+                                        "mime": "image/png", "label": "cat", "byte_len": 123}],
+                             "choices": []})
+
+    def test_option_widget_becomes_choices(self):
+        e = ev(10, text="Which one?\n\n[hatch_widget:widget-abc]\n\nTell me.")
+        e["payload"]["widgets"] = [
+            {"kind": "option", "widget_id": "widget-abc", "data": {"options": ["Red", "Blue", 3]},
+             "state": {"data": {}, "version": 0}},
+            {"kind": "map", "widget_id": "widget-map", "data": {}}]
+        m = bridge.to_message(e)
+        self.assertEqual(m["text"], "Which one?\n\n\n\nTell me.")
+        self.assertEqual(m["choices"], [{"id": "widget-abc", "options": ["Red", "Blue"], "selected": None}])
+        e["payload"]["widgets"][0]["state"] = {"data": {"selectedText": "Blue"}, "version": 1}
+        self.assertEqual(bridge.to_message(e)["choices"][0]["selected"], "Blue")
+        e["payload"]["display_text"] = e["payload"]["content"] = "Pick one\n\n[[hatch_widget:widget-abc]]"
+        self.assertEqual(bridge.to_message(e)["text"], "Pick one")
+
+    def test_user_attachment_becomes_a_file(self):
+        e = ev(11, role="user", status=None,
+               text="[image:image/jpeg workspace/uploads/u1/shot.jpg] what is this?")
+        e["payload"]["metadata"] = {"attachments": [
+            {"path": "workspace/uploads/u1/shot.jpg", "mime_type": "image/jpeg",
+             "filename": "image_0.jpg", "bytes_len": 2048}]}
+        m = bridge.to_message(e)
+        self.assertEqual(m["text"], "what is this?")
+        self.assertEqual(m["files"], [{"path": "sandbox://workspace/uploads/u1/shot.jpg", "kind": "image",
+                                       "mime": "image/jpeg", "label": "image_0.jpg", "byte_len": 2048}])
+        e["payload"]["display_text"] = e["payload"]["content"] = "[image:image/jpeg workspace/uploads/u1/shot.jpg]"
+        self.assertEqual(bridge.to_message(e)["text"], "")
 
     def test_draft_push_user_and_fallback_time(self):
         self.assertFalse(bridge.to_message(ev(6, status=None))["final"])
@@ -250,6 +278,11 @@ class PollingTest(unittest.TestCase):
         self.advance(8)
         self.assertEqual(self.messages(), [3])
         self.assertTrue(self.events[-1][1]["message"]["push"])
+
+    def test_main_chat_keeps_its_name(self):
+        res = self.b.dispatch("open", {"session_id": None, "title": "About the weather"})
+        self.assertEqual(res["chat"], {"session_id": None, "title": "main chat"})
+        self.assertEqual(self.b.load_state()["title"], "main chat")
 
     def test_idle_poll_is_slow(self):
         polls = lambda: sum(1 for m, _ in self.gw.calls if m == "chat.history")

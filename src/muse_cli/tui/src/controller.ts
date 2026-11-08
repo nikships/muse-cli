@@ -79,6 +79,8 @@ export class Controller {
         pending,
         draft,
         thinkingSince: replyLanded ? null : s.thinkingSince,
+        // The bridge keeps listening a little longer for follow-ups, but the reply is here.
+        awaiting: replyLanded ? false : s.awaiting,
       }
     })
   }
@@ -150,6 +152,7 @@ export class Controller {
   }
 
   async openChat(chat: Chat, opts: { quiet?: boolean } = {}) {
+    if (!chat.session_id) chat = { session_id: null, title: "main chat" }
     const same = (chat.session_id ?? null) === (this.s.chat.session_id ?? null) && this.s.messages.length > 0
     this.store.set({
       chat,

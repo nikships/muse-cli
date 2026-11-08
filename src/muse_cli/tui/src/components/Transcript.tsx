@@ -2,18 +2,18 @@ import type { ScrollBoxRenderable } from "@opentui/core"
 import { forwardRef, memo, useEffect, useMemo, useRef, useState } from "react"
 import { useApp, useRenderNode, useS, useSyntaxStyle, useTick } from "../context"
 import { bytes, clock, dayLabel, fileName, truncate } from "../format"
-import type { FileRef, Message } from "../protocol"
+import type { Choice, FileRef, Message } from "../protocol"
 import type { Pending } from "../store"
 import { gradientAt, gradientWave, theme } from "../theme"
 import { GradientText, spinner } from "./common"
 
 const FILE_ICON: Record<string, string> = { image: "▣", video: "▶", audio: "♪", document: "▤", link: "↗" }
 
-function FileChips(props: { files: FileRef[] }) {
+function FileChips(props: { files: FileRef[]; end?: boolean }) {
   const { ctl } = useApp()
   if (!props.files?.length) return null
   return (
-    <box flexDirection="row" flexWrap="wrap" gap={1} paddingLeft={2} marginTop={1}>
+    <box flexDirection="row" flexWrap="wrap" gap={1} paddingLeft={props.end ? 0 : 2} marginTop={props.end ? 0 : 1} justifyContent={props.end ? "flex-end" : "flex-start"}>
       {props.files.map((f) => {
         const kind = (f.kind ?? "file").replace(/s$/, "")
         const name = truncate(f.label || fileName(f.path), 36)
@@ -37,6 +37,49 @@ function FileChips(props: { files: FileRef[] }) {
         )
       })}
     </box>
+  )
+}
+
+function Choices(props: { choices?: Choice[] }) {
+  const { ctl } = useApp()
+  const [picked, setPicked] = useState<Record<string, string>>({})
+  if (!props.choices?.length) return null
+  return (
+    <>
+      {props.choices.map((c) => {
+        const chosen = c.selected ?? picked[c.id] ?? null
+        return (
+          <box key={c.id} flexDirection="row" flexWrap="wrap" gap={1} paddingLeft={2} marginTop={1}>
+            {c.options.map((o, i) => {
+              const mine = chosen === o
+              return (
+                <box
+                  key={i}
+                  border
+                  borderStyle="rounded"
+                  borderColor={mine ? theme.metaBlue : theme.divider}
+                  backgroundColor={mine ? theme.card : undefined}
+                  paddingX={1}
+                  onMouseDown={
+                    chosen
+                      ? undefined
+                      : () => {
+                          setPicked((p) => ({ ...p, [c.id]: o }))
+                          ctl.send(o)
+                        }
+                  }
+                >
+                  <text selectable={false}>
+                    <span fg={mine ? theme.link : chosen ? theme.textFaint : gradientAt(i / Math.max(1, c.options.length))}>{mine ? "✓ " : "↳ "}</span>
+                    <span fg={mine ? "#FFFFFF" : chosen ? theme.textFaint : theme.text}>{o}</span>
+                  </text>
+                </box>
+              )
+            })}
+          </box>
+        )
+      })}
+    </>
   )
 }
 
@@ -67,14 +110,14 @@ function useTypewriter(target: string, active: boolean): string {
   return shown
 }
 
-export const AssistantMessage = memo(function AssistantMessage(props: { m: Message; streaming?: boolean }) {
+export const AssistantMessage = memo(function AssistantMessage(props: { m: Message; streaming?: boolean; id?: string }) {
   const style = useSyntaxStyle()
   const renderNode = useRenderNode()
   const { m } = props
   const text = useTypewriter(m.text, !!props.streaming)
   const tick = useTick(80, !!props.streaming)
   return (
-    <box flexDirection="column" marginBottom={1} paddingRight={4}>
+    <box id={props.id} flexDirection="column" marginBottom={1} paddingRight={4}>
       <box flexDirection="row" height={1}>
         <GradientText text="◆ Muse" bold phase={props.streaming ? tick / 25 : 0} wave={props.streaming} />
         <text fg={theme.textFaint} selectable={false}>
@@ -88,19 +131,23 @@ export const AssistantMessage = memo(function AssistantMessage(props: { m: Messa
         </box>
       ) : null}
       <FileChips files={m.files} />
+      {props.streaming ? null : <Choices choices={m.choices} />}
     </box>
   )
 })
 
-export const UserMessage = memo(function UserMessage(props: { text: string; at_ms: number; state?: "sending" | "failed"; onRetry?: () => void }) {
+export const UserMessage = memo(function UserMessage(props: { text: string; at_ms: number; state?: "sending" | "failed"; onRetry?: () => void; id?: string; files?: FileRef[] }) {
   const failed = props.state === "failed"
   return (
-    <box flexDirection="column" marginBottom={1} alignItems="flex-end" paddingLeft={10}>
-      <box backgroundColor={failed ? "#5A1A24" : props.state ? "#2D5BB8" : theme.userBubble} paddingX={2} onMouseDown={props.onRetry}>
-        <text fg={theme.userText} wrapMode="word">
-          {props.text}
-        </text>
-      </box>
+    <box id={props.id} flexDirection="column" marginBottom={1} alignItems="flex-end" paddingLeft={10}>
+      {props.files?.length ? <FileChips files={props.files} end /> : null}
+      {props.text ? (
+        <box backgroundColor={failed ? "#5A1A24" : props.state ? "#2D5BB8" : theme.userBubble} paddingX={2} onMouseDown={props.onRetry}>
+          <text fg={theme.userText} wrapMode="word">
+            {props.text}
+          </text>
+        </box>
+      ) : null}
       <text fg={failed ? theme.red : theme.textFaint} selectable={false}>
         {failed ? "Not sent · click to retry" : props.state === "sending" ? "Sending…" : clock(props.at_ms)}
       </text>
@@ -253,9 +300,9 @@ export const Transcript = forwardRef<ScrollBoxRenderable, {}>(function Transcrip
           <DaySep key={r.key} label={r.label} />
         ) : r.kind === "msg" ? (
           r.m.role === "user" ? (
-            <UserMessage key={r.key} text={r.m.text} at_ms={r.m.at_ms} />
+            <UserMessage key={r.key} id={`msg-${r.m.seq}`} text={r.m.text} at_ms={r.m.at_ms} files={r.m.files} />
           ) : (
-            <AssistantMessage key={r.key} m={r.m} />
+            <AssistantMessage key={r.key} id={`msg-${r.m.seq}`} m={r.m} />
           )
         ) : (
           <UserMessage

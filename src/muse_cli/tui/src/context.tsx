@@ -62,6 +62,8 @@ export function useRenderNode(): RenderNode {
         width: "100%",
         flexShrink: 0,
       })
+      // Top-level blocks carry their spacing as marginTop; keep it on the frame, not inside it.
+      inner.marginTop = 0
       inner.marginBottom = 0
       box.add(inner)
       return box
