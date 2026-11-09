@@ -11,8 +11,9 @@ fails and report it.
 
 The `muse-cli` package (on PyPI) talks to the muse.ai personal gateway
 directly. No browser needed after the one-time cookie export. Every command
-prints JSON except the interactive chat (`muse-cli` with no arguments, or
-`muse-cli chat`), which is a human REPL. Agents should never run it.
+prints JSON except the interactive ones: `muse-cli` with no arguments (the
+full-screen app on a terminal, else the plain chat), `muse-cli tui` and
+`muse-cli chat`. They are for humans. Agents should never run them.
 
 ## 1. Install
 
@@ -226,8 +227,8 @@ only for methods with no wrapper.
 - `export-data` writes the user's entire agent data (workspace, chats) to
   disk. It takes about 20 s for a few hundred MB. Run it only when asked, and
   keep the ZIP private.
-- Running `muse-cli` with no command opens the interactive chat and blocks on
-  stdin. From an agent, always pass an explicit command such as `status` or
+- Running `muse-cli` with no command opens the full-screen app (or the plain
+  chat without Bun) and blocks on the terminal. From an agent, always pass an explicit command such as `status` or
   `send`.
 - `history` without `--thread` reads the main chat only.
 - Agent media shows up as `sandbox://workspace/...` paths, often in a

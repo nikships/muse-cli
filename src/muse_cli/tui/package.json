@@ -1,0 +1,21 @@
+{
+  "name": "muse-cli-tui",
+  "private": true,
+  "type": "module",
+  "description": "Full-screen terminal app for muse-cli, built on OpenTUI",
+  "scripts": {
+    "start": "bun src/main.tsx",
+    "test": "bun test",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@opentui/core": "0.8.3",
+    "@opentui/react": "0.8.3",
+    "react": "19.2.0"
+  },
+  "devDependencies": {
+    "@types/bun": "1.4.1",
+    "@types/react": "19.2.0",
+    "typescript": "^5"
+  }
+}

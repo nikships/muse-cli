@@ -25,7 +25,16 @@ Noise-XX WebSocket to the user's personal VM, carrying protobuf envelopes.
   Chromium browsers' cookie databases (`auth export`), no network.
 - `src/muse_cli/gateway.py`: `Gateway` client (tokens, Noise transport,
   request/subscribe/download), `AuthError`, `GatewayError`, `load_cookies`.
-- `src/muse_cli/chat.py`: the interactive REPL (`muse-cli` with no command).
+- `src/muse_cli/chat.py`: the plain interactive REPL (`muse-cli chat`, and
+  bare `muse-cli` when the full-screen app can't run).
+- `src/muse_cli/tui.py`: launcher for the full-screen app (`muse-cli tui`,
+  bare `muse-cli` on a terminal with Bun). Copies `src/muse_cli/tui` to
+  `~/.cache/muse-cli/tui/<hash>`, runs `bun install`, then the app.
+- `src/muse_cli/tui/`: the full-screen app, TypeScript on OpenTUI (React) and
+  Bun. It is the one non-Python part, and talks to muse.ai only through
+  `src/muse_cli/bridge.py`, a JSON-lines process over pipes. `demo.py` is the
+  made-up backend for `--demo`. Read `docs/TUI.md` before changing the
+  protocol.
 - `src/muse_cli/update.py`: daily PyPI update notice and `muse-cli update`,
   which also refreshes an installed skill.
 - `src/muse_cli/skill.py`: copies the bundled `SKILL.md` to
@@ -61,7 +70,10 @@ Noise-XX WebSocket to the user's personal VM, carrying protobuf envelopes.
   `chat.json`, `chat_history`, `update.json`).
 - Environment variables: `MUSE_VM_ID` (skip VM discovery), `MUSE_NODE_ID`
   (fixed device id), `MUSE_NO_UPDATE_CHECK=1` (silence the update notice),
-  `MUSE_CLI_SKILLS` (skills root used by `update`, same as `install.sh`).
+  `MUSE_CLI_SKILLS` (skills root used by `update`, same as `install.sh`),
+  `MUSE_CLI_UI=plain` (bare `muse-cli` opens the plain chat),
+  `MUSE_CLI_TUI_DIR` (run the app from this directory instead of the cache),
+  `MUSE_CLI_DEMO=1` (same as `tui --demo`).
 
 ## Testing
 
@@ -72,12 +84,15 @@ Noise-XX WebSocket to the user's personal VM, carrying protobuf envelopes.
 - Tests use `unittest` and `unittest.mock` and never call muse.ai. Keep it
   that way: mock `Gateway` and the network.
 - `tests/test_release.py` builds throwaway git repos, so it needs `git` on PATH.
+- The app has its own tests (`bun:test`, against an in-memory fake bridge):
+  `cd src/muse_cli/tui && bun install && bun test && bunx tsc --noEmit`.
+  Try it by hand with `MUSE_CLI_TUI_DIR=$PWD/src/muse_cli/tui uv run muse-cli tui --demo`.
 - No linter, formatter, or type checker is configured. Do not add one in an
   unrelated change.
 - Add or update a test for each behavior change.
 - After touching argument parsing or packaging, also run
-  `uv run muse-cli --version`, `--help`, and `chat --help`. CI smoke-tests the
-  built wheel with the same three commands.
+  `uv run muse-cli --version`, `--help`, `chat --help`, and `tui --help`. CI
+  smoke-tests the built wheel with the same commands.
 
 ## Code style
 

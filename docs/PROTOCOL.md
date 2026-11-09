@@ -86,6 +86,28 @@ chat / feed / goals / ideas / sessions / ...
   not in `routes.json`; sent as a raw-path daemon request over the Noise
   tunnel it returns the file (body chunks). `Gateway.download_file()` wraps
   this. `artifacts.fetch_url` is unrelated (needs `project_dir`).
+- **Presentations**: images, files and other widgets the agent shows arrive
+  in history as their own `delta.presentation` events (role `assistant`,
+  empty `reply_to_message_id`, no `status`) after the text reply.
+  `payload.kind` is `image` (`data.images[]`), `file` (`data.file`, a single
+  object), `external_link` (`data.url`), `internal_link_action_card`
+  (`data.title`, `data.subtitle`, `data.data.url`), `space_build_completed`
+  (`data.display_name`, `data.summary`), `browser_task` (`data.display_state`,
+  `data.current_site`), `html` (`data.html`) or `voice_options`.
+  `display_text` is a caption or a markdown link, `fallback_text` the
+  markdown version. Names in `display_text` are wrapped in Unicode isolates
+  (U+2068/U+2069). A browser task that updates is re-sent with a new `seq`
+  and the same `payload.id`; when `data.activity_title_source` is `state`,
+  `display_text` is only the status ("Task completed").
+- **User uploads** (a photo sent from the phone app): the text is
+  `[image:<mime> workspace/<p>]` and `payload.metadata.attachments[]` has
+  `{path: "workspace/<p>", mime_type, filename, bytes_len, width, height}`.
+  The bare path downloads like an agent file as `sandbox://workspace/<p>`.
+- **Quick-reply widgets**: the text holds `[hatch_widget:<widget_id>]` (or
+  `[[hatch_widget:<widget_id>]]`) and `payload.widgets[]` has
+  `{widget_id, kind: "option", data: {options: [...]}, fallback_text,
+  state: {data: {selectedText}, version}}`. `widgets.state.set` and
+  `widgets.state.patch` exist in `routes.json` but are not mapped yet.
 - `session.start`: `{method: "/api/session/start", params: {origin: "fresh",
   lifecycle: "persistent"}}`. A `title` param is accepted but ignored (the
   chat stays untitled), so `start_session` follows up with `session.rename`.
