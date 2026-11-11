@@ -254,6 +254,12 @@ class ReadCookiesTest(unittest.TestCase):
         jar, _ = self.read()
         self.assertEqual(jar[0]["value"], "LIVE")
 
+    def test_unknown_browser_name_is_a_browser_error(self):
+        with self.assertRaisesRegex(browsers.BrowserCookieError, "unknown browser"):
+            browsers.cookie_stores(["safari"])
+        with self.assertRaisesRegex(browsers.BrowserCookieError, "unknown browser"):
+            self.read("safari")
+
     def test_missing_browser_and_unknown_profiles(self):
         with self.assertRaisesRegex(browsers.BrowserCookieError, "no Chromium-based browser"):
             self.read()

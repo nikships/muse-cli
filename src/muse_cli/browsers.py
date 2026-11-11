@@ -41,7 +41,14 @@ def cookie_stores(names=None):
     """(browser, profile, path) for every cookie database that exists."""
     found = []
     for name in names or BROWSERS:
-        base = os.path.join(SUPPORT, BROWSERS[name][0])
+        try:
+            data_dir = BROWSERS[name][0]
+        except KeyError:
+            raise BrowserCookieError(
+                f"unknown browser '{name}'; choose from: "
+                + ", ".join(["auto", *BROWSERS])
+            ) from None
+        base = os.path.join(SUPPORT, data_dir)
         try:
             profiles = sorted(os.listdir(base))
         except OSError:
