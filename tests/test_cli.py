@@ -240,6 +240,25 @@ class SendDownloadTest(unittest.TestCase):
         self.assertEqual(results[0]["reply"]["seq"], 5)
 
 
+class SendBaselineTest(unittest.TestCase):
+    def test_failed_history_read_does_not_send(self):
+        old_reply = {"seq": 9, "event_name": "message.assistant",
+                     "payload": {"display_text": "old answer", "status": "completed"}}
+        for error in (cli.GatewayError(503, "unavailable"), TimeoutError("history timeout")):
+            with self.subTest(error=type(error).__name__):
+                gw = MagicMock()
+                gw.call_json.side_effect = [error, {"chat_events": [old_reply]}]
+                args = cli.argparse.Namespace(text="new question", thread=None, wait=1,
+                                              download=None)
+                with patch.object(cli, "load_config", return_value={"node_id": "n"}), \
+                        patch.object(cli, "connect", return_value=gw), \
+                        patch.object(cli, "out") as out, self.assertRaises(type(error)):
+                    cli.cmd_send(args)
+                gw._open.assert_not_called()
+                out.assert_not_called()
+                gw.close.assert_called_once()
+
+
 class StartSessionTest(unittest.TestCase):
     def test_title_is_applied_with_a_rename(self):
         gw = MagicMock()

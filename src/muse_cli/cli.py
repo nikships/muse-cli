@@ -578,14 +578,8 @@ def cmd_send(args):
         # chat.history without session_id reads the main chat; with it, the
         # thread. Either way the scope matches where the reply will land.
         scope = {"session_id": args.thread} if args.thread else {}
-        baseline = 0
-        try:
-            h = gw.call_json("chat.history", body={"limit": 1, **scope})
-            evs = h.get("chat_events", [])
-            if evs:
-                baseline = max(e.get("seq", 0) for e in evs)
-        except (GatewayError, TimeoutError):
-            pass
+        h = gw.call_json("chat.history", body={"limit": 1, **scope})
+        baseline = max((e.get("seq", 0) for e in h.get("chat_events", [])), default=0)
         stream_sid = gw._open("chat.stream", body=params)
         if not args.wait:
             out({"sent": True, "stream": stream_sid,
