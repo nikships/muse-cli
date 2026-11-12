@@ -172,7 +172,7 @@ Use this when you don't have Node, or you don't want remote debugging on.
 
 1. In Chrome, open https://muse.ai/ and log in.
 2. Open DevTools (F12, or Ctrl+Shift+I) → **Application** → **Cookies** → `https://muse.ai`.
-3. Copy the cookies onto one line. `hatch_sess` has to be there. Separate cookies with `; ` (semicolon, space). A Netscape cookie jar (what curl writes) and a JSON object such as `{"hatch_sess": "..."}` also work.
+3. Copy the cookies onto one line. `hatch_sess` has to be there. Separate cookies with `; ` (semicolon, space). A Netscape cookie jar (what curl writes) and a JSON object such as `{"hatch_sess": "..."}` also work. From a cookie jar, muse-cli reads only the `muse.ai` rows.
 
 ```bash
 mkdir -p ~/.config/muse-cli

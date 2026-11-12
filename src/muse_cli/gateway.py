@@ -120,7 +120,7 @@ def fetch_hatch_token(cookies, access_token, vm_id):
 
 
 def load_cookies(path):
-    """Accept a curl-style 'a=b; c=d' file or {"cookies": {...}} JSON."""
+    """Accept an 'a=b; c=d' line, {"cookies": {...}} JSON, or a Netscape cookie jar."""
     raw = open(path).read().strip()
     if raw.startswith("{"):
         try:
@@ -139,10 +139,12 @@ def load_cookies(path):
     # Netscape cookie-jar format
     parts = []
     for line in raw.splitlines():
+        # curl marks HttpOnly cookies, hatch_sess among them, with this prefix.
+        line = line.removeprefix("#HttpOnly_")
         if not line or line.startswith("#"):
             continue
         cols = line.split("\t")
-        if len(cols) >= 7:
+        if len(cols) >= 7 and cols[0].lower() in ("muse.ai", ".muse.ai"):
             parts.append(f"{cols[5]}={cols[6]}")
     if not parts:
         raise AuthError(f"could not parse cookies file {path}")

@@ -2,6 +2,7 @@ import importlib.util
 import io
 import json
 import os
+import tempfile
 import threading
 import unittest
 from unittest.mock import MagicMock, patch
@@ -191,6 +192,19 @@ class ResponseDeadlineTest(unittest.TestCase):
                 self.assertRaises(TimeoutError):
             gw.request("tasks.list", timeout=5)
         self.assertLessEqual(clock[0], 5)
+
+
+class LoadCookiesTest(unittest.TestCase):
+    def test_curl_cookie_jar_keeps_httponly_rows_and_drops_other_sites(self):
+        jar = ("# Netscape HTTP Cookie File\n"
+               "#HttpOnly_.muse.ai\tTRUE\t/\tTRUE\t0\thatch_sess\tsecret\n"
+               ".muse.ai\tTRUE\t/\tFALSE\t0\ttheme\tdark\n"
+               ".notmuse.ai\tTRUE\t/\tFALSE\t0\tlookalike\tx\n"
+               "#HttpOnly_.example.com\tTRUE\t/\tTRUE\t0\tsession\ty\n")
+        with tempfile.NamedTemporaryFile("w", suffix=".txt") as fh:
+            fh.write(jar)
+            fh.flush()
+            self.assertEqual(gateway.load_cookies(fh.name), "hatch_sess=secret; theme=dark")
 
 
 class RouteTableTest(unittest.TestCase):
