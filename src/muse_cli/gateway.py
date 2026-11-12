@@ -15,6 +15,7 @@ import queue as queue_mod
 
 from curl_cffi import requests as rq
 from curl_cffi.requests import WebSocket
+from curl_cffi.requests.websockets import WebSocketTimeout
 from noise.connection import NoiseConnection, Keypair
 from google.protobuf import descriptor_pb2, descriptor_pool, message_factory
 
@@ -187,7 +188,11 @@ class Gateway:
         noise.set_keypair_from_private_bytes(Keypair.STATIC, os.urandom(32))
         noise.start_handshake()
         self.ws.send_bytes(bytes(noise.write_message(b"")))
-        m2, _ = self.ws.recv()
+        try:
+            m2, _ = self.ws.recv(timeout=20)
+        except WebSocketTimeout:
+            self.ws.close()
+            raise TimeoutError("gateway handshake timed out") from None
         noise.read_message(bytes(m2))
         self.ws.send_bytes(bytes(noise.write_message(b"")))
         assert noise.handshake_finished
@@ -206,7 +211,7 @@ class Gateway:
         with self._send_lock:
             self.ws.send_bytes(bytes(self.noise.encrypt(fr.SerializeToString())))
 
-    def _read_frame(self):
+    def _read_frame(self, deadline=None):
         # Serialized so two threads can never interleave ws.recv / Noise
         # decrypt (which corrupts the transport state -> BAD_DECRYPT).
         # Callers must still avoid *logical* races: only one thread should
@@ -216,7 +221,13 @@ class Gateway:
             # several transport frames sharing a chunk_id; only the joined
             # payload is a ServiceResponse. Keep reading until it is whole.
             while True:
-                data, _flags = self.ws.recv()
+                remaining = None if deadline is None else deadline - time.monotonic()
+                if remaining is not None and remaining <= 0:
+                    raise TimeoutError("gateway response timed out")
+                try:
+                    data, _flags = self.ws.recv(timeout=remaining)
+                except WebSocketTimeout:
+                    raise TimeoutError("gateway response timed out") from None
                 pt = bytes(self.noise.decrypt(bytes(data)))
                 ntf = NoiseTransportFrame()
                 ntf.ParseFromString(pt)
@@ -280,14 +291,14 @@ class Gateway:
             query, body = body, None
         sid = self._open(method, path_params, body, query, route=route)
         status, headers, err, done = None, {}, [], False
-        deadline = time.time() + timeout
+        deadline = time.monotonic() + timeout
 
         def feed(data):
             if data:
                 (sink if 200 <= status < 300 else err.append)(data)
 
-        while time.time() < deadline and not done:
-            sf = self._read_frame()
+        while time.monotonic() < deadline and not done:
+            sf = self._read_frame(deadline=deadline)
             if sf.stream_id != sid:
                 continue
             kind = sf.WhichOneof("kind")

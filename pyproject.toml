@@ -53,7 +53,7 @@ classifiers = [
     "Topic :: Utilities",
 ]
 dependencies = [
-    "curl_cffi>=0.11",
+    "curl_cffi>=0.17",
     "noiseprotocol>=0.3",
     "protobuf>=5.0",
 ]

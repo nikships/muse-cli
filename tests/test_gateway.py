@@ -4,7 +4,9 @@ import json
 import os
 import threading
 import unittest
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
+
+from curl_cffi.requests.websockets import WebSocketTimeout
 
 from muse_cli import gateway
 from muse_cli.gateway import (ROUTES, SERVICE_IDS, Gateway, GatewayError, NoiseTransportFrame,
@@ -155,6 +157,40 @@ class StreamingRequestTest(unittest.TestCase):
         gw = sending_gateway([frame_payload(7, "response", b'{"a":'),
                               frame_payload(7, "body_chunk", b"1}", end=True)])
         self.assertEqual(gw.call_json("tasks.list"), {"a": 1})
+
+
+class ResponseDeadlineTest(unittest.TestCase):
+    def stalling_gateway(self, frames, arrival=4):
+        gw = sending_gateway()
+        clock = [0]
+        pending = list(frames)
+
+        def recv(timeout=None):
+            if pending:
+                clock[0] += arrival
+                return pending.pop(0), 0
+            if timeout is None:
+                raise AssertionError("socket wait has no time limit")
+            clock[0] += timeout
+            raise WebSocketTimeout("no data")
+        gw.ws.recv.side_effect = recv
+        return gw, clock
+
+    def test_silent_socket_times_out_within_the_request_timeout(self):
+        gw, clock = self.stalling_gateway([])
+        with patch.object(gateway.time, "monotonic", lambda: clock[0]), \
+                self.assertRaises(TimeoutError):
+            gw.request("tasks.list", timeout=5)
+        self.assertLessEqual(clock[0], 5)
+
+    def test_reply_that_stalls_between_chunks_times_out_within_the_request_timeout(self):
+        payload = response_payload(b"x" * 5000)
+        gw, clock = self.stalling_gateway(
+            [transport(payload[:2500], chunk_id=-5, index=0, total=2)])
+        with patch.object(gateway.time, "monotonic", lambda: clock[0]), \
+                self.assertRaises(TimeoutError):
+            gw.request("tasks.list", timeout=5)
+        self.assertLessEqual(clock[0], 5)
 
 
 class RouteTableTest(unittest.TestCase):
