@@ -15,6 +15,7 @@ import queue as queue_mod
 
 from curl_cffi import requests as rq
 from curl_cffi.requests import WebSocket
+from curl_cffi.requests.websockets import WebSocketTimeout
 from noise.connection import NoiseConnection, Keypair
 from google.protobuf import descriptor_pb2, descriptor_pool, message_factory
 
@@ -119,33 +120,41 @@ def fetch_hatch_token(cookies, access_token, vm_id):
 
 
 def load_cookies(path):
-    """Accept a curl-style 'a=b; c=d' file or {"cookies": {...}} JSON."""
-    raw = open(path).read().strip()
+    """Accept an 'a=b; c=d' line, {"cookies": {...}} JSON, or a Netscape cookie jar."""
+    with open(path) as fh:
+        text = fh.read()
+    raw = text.strip()
     if raw.startswith("{"):
         try:
             d = json.loads(raw)
             if isinstance(d, dict) and "cookies" in d and isinstance(d["cookies"], dict):
                 return "; ".join(f"{k}={v}" for k, v in d["cookies"].items())
-            return "; ".join(f"{k}={v}" for k, v in d.items())
+            if isinstance(d, dict):
+                return "; ".join(f"{k}={v}" for k, v in d.items())
         except json.JSONDecodeError:
             pass
-    if "hatch_sess=" in raw or "datr=" in raw:
+    # Netscape cookie-jar format (checked before 'k=v' substring heuristics so
+    # a cookie value containing e.g. base64 'datr=' cannot misclassify a jar).
+    parts, jar_rows = [], False
+    for line in text.splitlines():
+        # curl marks HttpOnly cookies, hatch_sess among them, with this prefix.
+        line = line.removeprefix("#HttpOnly_")
+        if not line.strip() or line.lstrip().startswith("#"):
+            continue
+        cols = line.split("\t")
+        if len(cols) >= 7:
+            jar_rows = True
+            if cols[0].lower() in ("muse.ai", ".muse.ai"):
+                parts.append(f"{cols[5]}={cols[6]}")
+    if parts:
+        return "; ".join(parts)
+    if not jar_rows and ("hatch_sess=" in raw or "datr=" in raw):
         for line in raw.splitlines():
             line = line.strip()
             if line and not line.startswith("#") and "=" in line and ";" in line:
                 return line
         return " ".join(raw.split())
-    # Netscape cookie-jar format
-    parts = []
-    for line in raw.splitlines():
-        if not line or line.startswith("#"):
-            continue
-        cols = line.split("\t")
-        if len(cols) >= 7:
-            parts.append(f"{cols[5]}={cols[6]}")
-    if not parts:
-        raise AuthError(f"could not parse cookies file {path}")
-    return "; ".join(parts)
+    raise AuthError(f"could not parse cookies file {path}")
 
 
 def fetch_session_info(cookies):
@@ -181,16 +190,27 @@ class Gateway:
         self.ws = WebSocket()
         # verify=True is required: curl_cffi's WebSocket.connect defaults to
         # verify=None, which disables TLS certificate verification entirely.
-        self.ws.connect(url, impersonate="chrome", timeout=20, verify=True)
-        noise = NoiseConnection.from_name(b"Noise_XX_25519_AESGCM_SHA256")
-        noise.set_as_initiator()
-        noise.set_keypair_from_private_bytes(Keypair.STATIC, os.urandom(32))
-        noise.start_handshake()
-        self.ws.send_bytes(bytes(noise.write_message(b"")))
-        m2, _ = self.ws.recv()
-        noise.read_message(bytes(m2))
-        self.ws.send_bytes(bytes(noise.write_message(b"")))
-        assert noise.handshake_finished
+        try:
+            self.ws.connect(url, impersonate="chrome", timeout=20, verify=True)
+        except rq.exceptions.Timeout:
+            self.close()
+            raise TimeoutError("gateway connect timed out") from None
+        try:
+            noise = NoiseConnection.from_name(b"Noise_XX_25519_AESGCM_SHA256")
+            noise.set_as_initiator()
+            noise.set_keypair_from_private_bytes(Keypair.STATIC, os.urandom(32))
+            noise.start_handshake()
+            self.ws.send_bytes(bytes(noise.write_message(b"")), timeout=20)
+            m2, _ = self.ws.recv(timeout=20)
+            noise.read_message(bytes(m2))
+            self.ws.send_bytes(bytes(noise.write_message(b"")), timeout=20)
+            assert noise.handshake_finished
+        except (WebSocketTimeout, rq.exceptions.Timeout):
+            self.close()
+            raise TimeoutError("gateway handshake timed out") from None
+        except BaseException:
+            self.close()
+            raise
         self.noise = noise
         self.stream = 1
         self._send_lock = threading.Lock()
@@ -206,7 +226,7 @@ class Gateway:
         with self._send_lock:
             self.ws.send_bytes(bytes(self.noise.encrypt(fr.SerializeToString())))
 
-    def _read_frame(self):
+    def _read_frame(self, deadline=None):
         # Serialized so two threads can never interleave ws.recv / Noise
         # decrypt (which corrupts the transport state -> BAD_DECRYPT).
         # Callers must still avoid *logical* races: only one thread should
@@ -216,7 +236,13 @@ class Gateway:
             # several transport frames sharing a chunk_id; only the joined
             # payload is a ServiceResponse. Keep reading until it is whole.
             while True:
-                data, _flags = self.ws.recv()
+                remaining = None if deadline is None else deadline - time.monotonic()
+                if remaining is not None and remaining <= 0:
+                    raise TimeoutError("gateway response timed out")
+                try:
+                    data, _flags = self.ws.recv(timeout=remaining)
+                except WebSocketTimeout:
+                    raise TimeoutError("gateway response timed out") from None
                 pt = bytes(self.noise.decrypt(bytes(data)))
                 ntf = NoiseTransportFrame()
                 ntf.ParseFromString(pt)
@@ -280,14 +306,14 @@ class Gateway:
             query, body = body, None
         sid = self._open(method, path_params, body, query, route=route)
         status, headers, err, done = None, {}, [], False
-        deadline = time.time() + timeout
+        deadline = time.monotonic() + timeout
 
         def feed(data):
             if data:
                 (sink if 200 <= status < 300 else err.append)(data)
 
-        while time.time() < deadline and not done:
-            sf = self._read_frame()
+        while time.monotonic() < deadline and not done:
+            sf = self._read_frame(deadline=deadline)
             if sf.stream_id != sid:
                 continue
             kind = sf.WhichOneof("kind")

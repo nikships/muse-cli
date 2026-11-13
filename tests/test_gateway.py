@@ -2,13 +2,16 @@ import importlib.util
 import io
 import json
 import os
+import tempfile
 import threading
 import unittest
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
+
+from curl_cffi.requests.websockets import WebSocketTimeout
 
 from muse_cli import gateway
-from muse_cli.gateway import (ROUTES, SERVICE_IDS, Gateway, GatewayError, NoiseTransportFrame,
-                              ServiceFrame, ServiceResponse)
+from muse_cli.gateway import (ROUTES, SERVICE_IDS, AuthError, Gateway, GatewayError,
+                              NoiseTransportFrame, ServiceFrame, ServiceResponse)
 
 
 def make_gateway(frames):
@@ -155,6 +158,77 @@ class StreamingRequestTest(unittest.TestCase):
         gw = sending_gateway([frame_payload(7, "response", b'{"a":'),
                               frame_payload(7, "body_chunk", b"1}", end=True)])
         self.assertEqual(gw.call_json("tasks.list"), {"a": 1})
+
+
+class ResponseDeadlineTest(unittest.TestCase):
+    def stalling_gateway(self, frames, arrival=4):
+        gw = sending_gateway()
+        clock = [0]
+        pending = list(frames)
+
+        def recv(timeout=None):
+            if pending:
+                clock[0] += arrival
+                return pending.pop(0), 0
+            if timeout is None:
+                raise AssertionError("socket wait has no time limit")
+            clock[0] += timeout
+            raise WebSocketTimeout("no data")
+        gw.ws.recv.side_effect = recv
+        return gw, clock
+
+    def test_silent_socket_times_out_within_the_request_timeout(self):
+        gw, clock = self.stalling_gateway([])
+        with patch.object(gateway.time, "monotonic", lambda: clock[0]), \
+                self.assertRaises(TimeoutError):
+            gw.request("tasks.list", timeout=5)
+        self.assertLessEqual(clock[0], 5)
+
+    def test_reply_that_stalls_between_chunks_times_out_within_the_request_timeout(self):
+        payload = response_payload(b"x" * 5000)
+        gw, clock = self.stalling_gateway(
+            [transport(payload[:2500], chunk_id=-5, index=0, total=2)])
+        with patch.object(gateway.time, "monotonic", lambda: clock[0]), \
+                self.assertRaises(TimeoutError):
+            gw.request("tasks.list", timeout=5)
+        self.assertLessEqual(clock[0], 5)
+
+    def test_stalled_handshake_closes_socket_and_times_out(self):
+        ws = MagicMock()
+        ws.recv.side_effect = WebSocketTimeout("no handshake reply")
+        with patch.object(gateway, "WebSocket", return_value=ws), \
+                self.assertRaises(TimeoutError):
+            Gateway("hatch_sess=secret", vm_id="vm1", access_token="at", hatch_token="ht")
+        ws.recv.assert_called_once_with(timeout=20)
+        ws.close.assert_called_once()
+
+
+class LoadCookiesTest(unittest.TestCase):
+    def write_jar(self, tmp, text):
+        path = os.path.join(tmp, "cookies.txt")
+        with open(path, "w") as fh:
+            fh.write(text)
+        return path
+
+    def test_curl_cookie_jar_keeps_httponly_rows_and_drops_other_sites(self):
+        jar = ("# Netscape HTTP Cookie File\n"
+               "#HttpOnly_.muse.ai\tTRUE\t/\tTRUE\t0\thatch_sess\tsecret\n"
+               ".muse.ai\tTRUE\t/\tFALSE\t0\ttheme\tdark\n"
+               "muse.ai\tFALSE\t/\tFALSE\t0\tempty\t\n"
+               ".notmuse.ai\tTRUE\t/\tFALSE\t0\tlookalike\tx\n"
+               "#HttpOnly_.example.com\tTRUE\t/\tTRUE\t0\tsession\tabcdatr=\n")
+        with tempfile.TemporaryDirectory() as tmp:
+            path = self.write_jar(tmp, jar)
+            self.assertEqual(gateway.load_cookies(path),
+                             "hatch_sess=secret; theme=dark; empty=")
+
+    def test_cookie_jar_with_only_other_sites_raises_auth_error(self):
+        jar = ("# Netscape HTTP Cookie File\n"
+               "#HttpOnly_.example.com\tTRUE\t/\tTRUE\t0\tsession\tabcdatr=\n")
+        with tempfile.TemporaryDirectory() as tmp:
+            path = self.write_jar(tmp, jar)
+            with self.assertRaises(AuthError):
+                gateway.load_cookies(path)
 
 
 class RouteTableTest(unittest.TestCase):
