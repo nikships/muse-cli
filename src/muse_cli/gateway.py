@@ -121,34 +121,40 @@ def fetch_hatch_token(cookies, access_token, vm_id):
 
 def load_cookies(path):
     """Accept an 'a=b; c=d' line, {"cookies": {...}} JSON, or a Netscape cookie jar."""
-    raw = open(path).read().strip()
+    with open(path) as fh:
+        text = fh.read()
+    raw = text.strip()
     if raw.startswith("{"):
         try:
             d = json.loads(raw)
             if isinstance(d, dict) and "cookies" in d and isinstance(d["cookies"], dict):
                 return "; ".join(f"{k}={v}" for k, v in d["cookies"].items())
-            return "; ".join(f"{k}={v}" for k, v in d.items())
+            if isinstance(d, dict):
+                return "; ".join(f"{k}={v}" for k, v in d.items())
         except json.JSONDecodeError:
             pass
-    if "hatch_sess=" in raw or "datr=" in raw:
+    # Netscape cookie-jar format (checked before 'k=v' substring heuristics so
+    # a cookie value containing e.g. base64 'datr=' cannot misclassify a jar).
+    parts, jar_rows = [], False
+    for line in text.splitlines():
+        # curl marks HttpOnly cookies, hatch_sess among them, with this prefix.
+        line = line.removeprefix("#HttpOnly_")
+        if not line.strip() or line.lstrip().startswith("#"):
+            continue
+        cols = line.split("\t")
+        if len(cols) >= 7:
+            jar_rows = True
+            if cols[0].lower() in ("muse.ai", ".muse.ai"):
+                parts.append(f"{cols[5]}={cols[6]}")
+    if parts:
+        return "; ".join(parts)
+    if not jar_rows and ("hatch_sess=" in raw or "datr=" in raw):
         for line in raw.splitlines():
             line = line.strip()
             if line and not line.startswith("#") and "=" in line and ";" in line:
                 return line
         return " ".join(raw.split())
-    # Netscape cookie-jar format
-    parts = []
-    for line in raw.splitlines():
-        # curl marks HttpOnly cookies, hatch_sess among them, with this prefix.
-        line = line.removeprefix("#HttpOnly_")
-        if not line or line.startswith("#"):
-            continue
-        cols = line.split("\t")
-        if len(cols) >= 7 and cols[0].lower() in ("muse.ai", ".muse.ai"):
-            parts.append(f"{cols[5]}={cols[6]}")
-    if not parts:
-        raise AuthError(f"could not parse cookies file {path}")
-    return "; ".join(parts)
+    raise AuthError(f"could not parse cookies file {path}")
 
 
 def fetch_session_info(cookies):
@@ -184,20 +190,27 @@ class Gateway:
         self.ws = WebSocket()
         # verify=True is required: curl_cffi's WebSocket.connect defaults to
         # verify=None, which disables TLS certificate verification entirely.
-        self.ws.connect(url, impersonate="chrome", timeout=20, verify=True)
-        noise = NoiseConnection.from_name(b"Noise_XX_25519_AESGCM_SHA256")
-        noise.set_as_initiator()
-        noise.set_keypair_from_private_bytes(Keypair.STATIC, os.urandom(32))
-        noise.start_handshake()
-        self.ws.send_bytes(bytes(noise.write_message(b"")))
         try:
+            self.ws.connect(url, impersonate="chrome", timeout=20, verify=True)
+        except rq.exceptions.Timeout:
+            self.close()
+            raise TimeoutError("gateway connect timed out") from None
+        try:
+            noise = NoiseConnection.from_name(b"Noise_XX_25519_AESGCM_SHA256")
+            noise.set_as_initiator()
+            noise.set_keypair_from_private_bytes(Keypair.STATIC, os.urandom(32))
+            noise.start_handshake()
+            self.ws.send_bytes(bytes(noise.write_message(b"")), timeout=20)
             m2, _ = self.ws.recv(timeout=20)
-        except WebSocketTimeout:
-            self.ws.close()
+            noise.read_message(bytes(m2))
+            self.ws.send_bytes(bytes(noise.write_message(b"")), timeout=20)
+            assert noise.handshake_finished
+        except (WebSocketTimeout, rq.exceptions.Timeout):
+            self.close()
             raise TimeoutError("gateway handshake timed out") from None
-        noise.read_message(bytes(m2))
-        self.ws.send_bytes(bytes(noise.write_message(b"")))
-        assert noise.handshake_finished
+        except BaseException:
+            self.close()
+            raise
         self.noise = noise
         self.stream = 1
         self._send_lock = threading.Lock()

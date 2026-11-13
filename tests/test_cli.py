@@ -258,6 +258,20 @@ class SendBaselineTest(unittest.TestCase):
                 out.assert_not_called()
                 gw.close.assert_called_once()
 
+    def test_null_seq_in_history_defaults_baseline_to_zero(self):
+        reply = {"seq": 1, "event_name": "message.assistant",
+                 "payload": {"display_text": "fresh answer", "status": "completed"}}
+        gw = MagicMock()
+        gw.call_json.side_effect = [{"chat_events": [{"seq": None}]}, {"chat_events": [reply]}]
+        gw._open.return_value = 1
+        results = []
+        args = cli.argparse.Namespace(text="hi", thread=None, wait=5, download=None)
+        with patch.object(cli, "load_config", return_value={"node_id": "n"}), \
+                patch.object(cli, "connect", return_value=gw), \
+                patch.object(cli, "out", side_effect=results.append):
+            cli.cmd_send(args)
+        self.assertEqual(results[0]["reply"]["text"], "fresh answer")
+
 
 class StartSessionTest(unittest.TestCase):
     def test_title_is_applied_with_a_rename(self):

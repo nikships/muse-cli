@@ -10,8 +10,8 @@ from unittest.mock import MagicMock, patch
 from curl_cffi.requests.websockets import WebSocketTimeout
 
 from muse_cli import gateway
-from muse_cli.gateway import (ROUTES, SERVICE_IDS, Gateway, GatewayError, NoiseTransportFrame,
-                              ServiceFrame, ServiceResponse)
+from muse_cli.gateway import (ROUTES, SERVICE_IDS, AuthError, Gateway, GatewayError,
+                              NoiseTransportFrame, ServiceFrame, ServiceResponse)
 
 
 def make_gateway(frames):
@@ -193,18 +193,42 @@ class ResponseDeadlineTest(unittest.TestCase):
             gw.request("tasks.list", timeout=5)
         self.assertLessEqual(clock[0], 5)
 
+    def test_stalled_handshake_closes_socket_and_times_out(self):
+        ws = MagicMock()
+        ws.recv.side_effect = WebSocketTimeout("no handshake reply")
+        with patch.object(gateway, "WebSocket", return_value=ws), \
+                self.assertRaises(TimeoutError):
+            Gateway("hatch_sess=secret", vm_id="vm1", access_token="at", hatch_token="ht")
+        ws.recv.assert_called_once_with(timeout=20)
+        ws.close.assert_called_once()
+
 
 class LoadCookiesTest(unittest.TestCase):
+    def write_jar(self, tmp, text):
+        path = os.path.join(tmp, "cookies.txt")
+        with open(path, "w") as fh:
+            fh.write(text)
+        return path
+
     def test_curl_cookie_jar_keeps_httponly_rows_and_drops_other_sites(self):
         jar = ("# Netscape HTTP Cookie File\n"
                "#HttpOnly_.muse.ai\tTRUE\t/\tTRUE\t0\thatch_sess\tsecret\n"
                ".muse.ai\tTRUE\t/\tFALSE\t0\ttheme\tdark\n"
+               "muse.ai\tFALSE\t/\tFALSE\t0\tempty\t\n"
                ".notmuse.ai\tTRUE\t/\tFALSE\t0\tlookalike\tx\n"
-               "#HttpOnly_.example.com\tTRUE\t/\tTRUE\t0\tsession\ty\n")
-        with tempfile.NamedTemporaryFile("w", suffix=".txt") as fh:
-            fh.write(jar)
-            fh.flush()
-            self.assertEqual(gateway.load_cookies(fh.name), "hatch_sess=secret; theme=dark")
+               "#HttpOnly_.example.com\tTRUE\t/\tTRUE\t0\tsession\tabcdatr=\n")
+        with tempfile.TemporaryDirectory() as tmp:
+            path = self.write_jar(tmp, jar)
+            self.assertEqual(gateway.load_cookies(path),
+                             "hatch_sess=secret; theme=dark; empty=")
+
+    def test_cookie_jar_with_only_other_sites_raises_auth_error(self):
+        jar = ("# Netscape HTTP Cookie File\n"
+               "#HttpOnly_.example.com\tTRUE\t/\tTRUE\t0\tsession\tabcdatr=\n")
+        with tempfile.TemporaryDirectory() as tmp:
+            path = self.write_jar(tmp, jar)
+            with self.assertRaises(AuthError):
+                gateway.load_cookies(path)
 
 
 class RouteTableTest(unittest.TestCase):

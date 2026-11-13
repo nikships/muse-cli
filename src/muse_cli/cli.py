@@ -579,7 +579,7 @@ def cmd_send(args):
         # thread. Either way the scope matches where the reply will land.
         scope = {"session_id": args.thread} if args.thread else {}
         h = gw.call_json("chat.history", body={"limit": 1, **scope})
-        baseline = max((e.get("seq", 0) for e in h.get("chat_events", [])), default=0)
+        baseline = max((e.get("seq") or 0 for e in h.get("chat_events", [])), default=0)
         stream_sid = gw._open("chat.stream", body=params)
         if not args.wait:
             out({"sent": True, "stream": stream_sid,

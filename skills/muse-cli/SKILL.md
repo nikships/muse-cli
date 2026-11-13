@@ -147,7 +147,7 @@ Use this when Node is unavailable, the browser is Safari, or the user does not w
 hatch_sess=VALUE; other_name=other_value
 ```
 
-A Netscape jar or `{"hatch_sess": "..."}` JSON also works.
+A Netscape jar (only `muse.ai` rows are read) or `{"hatch_sess": "..."}` JSON also works.
 
 4. `chmod 600 ~/.config/muse-cli/cookies.txt`
 5. `test -s ~/.config/muse-cli/cookies.txt && echo auth-ok`, then `muse-cli status`.
