@@ -66,7 +66,7 @@ Noise-XX WebSocket to the user's personal VM, carrying protobuf envelopes.
   `~/.config/muse-cli/cookies.txt`. Without it they exit with an
   `auth error`. Use unit tests and `--help` for checks that must not touch the
   user's account.
-- State lives in `~/.config/muse-cli/` (`config.json`, `cookies.txt`,
+- State lives in `~/.config/muse-cli/` (`config.json`, `cookies.txt`, `tokens.json`,
   `chat.json`, `chat_history`, `update.json`).
 - Environment variables: `MUSE_VM_ID` (skip VM discovery), `MUSE_NODE_ID`
   (fixed device id), `MUSE_NO_UPDATE_CHECK=1` (silence the update notice),
@@ -149,14 +149,15 @@ change:
 
 - Cookies (`hatch_sess` and friends) are the user's login. They persist in
   `~/.config/muse-cli/cookies.txt` with mode 600. Never print, log, or commit
-  them. Access and gateway tokens are fetched fresh on every run.
+  them. Access and gateway tokens are cached in `tokens.json` (mode 600, keyed
+  by a hash of the cookies) for 15 minutes, and refetched when refused.
 - `auth export` must never overwrite a working cookie file with one that lacks
   `hatch_sess`. On macOS it decrypts the muse.ai rows of the user's own
   browser cookie database (`browsers.py`); elsewhere it reads the user's own
   Chrome through `agent-browser --auto-connect`. Never fall back to a fresh
   browser, which has no login. Read only muse.ai rows, never log or print
   cookie values, and never keep a copy of a browser's cookie database around.
-- `.gitignore` covers `cookies.txt`, `agent-cookies.json`, `config.json`, and
+- `.gitignore` covers `cookies.txt`, `agent-cookies.json`, `config.json`, `tokens.json`, and
   `*.har`. HAR captures hold live credentials, so never commit one.
 - Commands that write (`send`, `feed-react`, `idea-exec`, session ops, `raw`
   POSTs) act as the user inside their agent. Do not run them against a real

@@ -36,7 +36,7 @@ muse-cli --help >/dev/null && echo cli-ok   # proves the install + deps resolve
 
 The CLI stores the user's muse.ai browser login at
 `~/.config/muse-cli/cookies.txt` (mode 0600). Access and gateway tokens are
-fetched fresh on every run; only cookies persist. When a later command fails
+cached for 15 minutes in `tokens.json` (mode 0600) and refetched when refused. When a later command fails
 with `auth error`, the cookies expired: repeat this step.
 
 ### 2a. macOS: read the browser directly (try this first)
