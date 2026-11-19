@@ -58,8 +58,8 @@ you have logged in at https://muse.ai/ in your browser. Follow
 
 muse-cli borrows the login you already have in your browser, saves those
 cookies to `~/.config/muse-cli/cookies.txt` (mode `600`, only your user can
-read it), and after that talks to muse.ai directly. Access tokens are fetched
-fresh on every command. When a command later says the cookies expired, repeat
+read it), and after that talks to muse.ai directly. Access tokens are reused
+for up to 15 minutes (`tokens.json`, mode `600`), so commands start fast. When a command later says the cookies expired, repeat
 this section.
 
 ### On a Mac (Chrome, Brave, Arc, Edge or Chromium)
@@ -337,7 +337,7 @@ release flow and contributor notes. Merging to `main` publishes a release.
 
 - Login is the [Log in once](#log-in-once) section above. Cookies live at
   `~/.config/muse-cli/cookies.txt` (mode 600). Access and gateway tokens are
-  fetched fresh on every run.
+  cached in `tokens.json` (mode 600) for 15 minutes and refetched when refused.
 - On macOS, `auth export` decrypts the muse.ai cookies from the browser's own
   cookie file, using the browser's Safe Storage key from your login keychain.
   Elsewhere it reads Google Chrome through
