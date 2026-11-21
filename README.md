@@ -2,6 +2,10 @@
 
 # muse-cli
 
+<!-- yarkr:badges:start -->
+[![Indexed on Yarkr](https://api.yarkr.com/functions/v1/api/api/v1/badges/repos/nikships/muse-cli/version.svg)](https://yarkr.com/arks/nikships/muse-cli)
+<!-- yarkr:badges:end -->
+
 Talk to your personal muse.ai AI agent from the terminal.
 
 [![PyPI](https://img.shields.io/pypi/v/muse-cli?style=for-the-badge)](https://pypi.org/project/muse-cli/)
@@ -53,6 +57,38 @@ Upgrade with `muse-cli update`. It also refreshes the agent skill if you install
 Logging in is a separate one-time step. On a Mac it is one command, run after
 you have logged in at https://muse.ai/ in your browser. Follow
 [Log in once](#log-in-once) before running any other command.
+
+<!-- yarkr:install:start -->
+## Install with Yarkr
+
+This repo is indexed on [Yarkr](https://yarkr.com/arks/nikships/muse-cli) as the ark [nikships/muse-cli](https://yarkr.com/arks/nikships/muse-cli), so its skills install into Claude Code, Codex, Cursor and other agent harnesses with one command.
+
+### CLI
+
+Install the whole ark, which Yarkr keeps equal to this repo:
+
+```bash
+npx yarkr-cli sync nikships/muse-cli
+```
+
+Or add individual skills:
+
+```bash
+npx yarkr-cli add skill:nikships/muse-cli/muse-cli
+```
+
+No Node.js? `curl -fsSL https://yarkr.com/install.sh | sh` (macOS, Linux) or `irm https://yarkr.com/install.ps1 | iex` (Windows PowerShell) installs `yarkr` as a standalone binary; then type `yarkr` in place of `npx yarkr-cli`.
+
+### MCP
+
+Connect your agent to the ark over MCP:
+
+```bash
+npx yarkr-cli mcp add nikships/muse-cli
+```
+
+Or point any MCP client at `https://api.yarkr.com/functions/v1/api/mcp/o/nikships/muse-cli`.
+<!-- yarkr:install:end -->
 
 ## Log in once
 
