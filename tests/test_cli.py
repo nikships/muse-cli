@@ -219,6 +219,15 @@ class TokenCacheTest(unittest.TestCase):
         self.connect(MagicMock())
         self.assertEqual(len(self.fetches), 9)
 
+    def test_pinned_vm_id_skips_a_cache_for_another_vm(self):
+        self.connect(MagicMock())
+        cfg = dict(self.cfg, vm_id="other-vm")
+        with patch.object(cli, "Gateway", MagicMock()) as gateway:
+            cli.connect(cfg)
+        self.assertEqual(len(self.fetches), 5)
+        gateway.assert_called_with("hatch_sess=secret; datr=x", vm_id="other-vm",
+                                   access_token="at", hatch_token="ht")
+
 
 @unittest.skipIf(os.name == "nt", "a closed pipe is not a BrokenPipeError on Windows")
 class BrokenPipeTest(unittest.TestCase):

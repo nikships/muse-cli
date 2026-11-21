@@ -104,6 +104,13 @@ def _save_tokens(cookies, tokens):
         os.makedirs(CONFIG_DIR, exist_ok=True)
         tmp = TOKENS_FILE + ".tmp"
         fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+        # The mode above only applies when the tmp file is created. A tmp
+        # file left behind by a crashed run keeps its old mode, so enforce
+        # it on the open descriptor too.
+        try:
+            os.fchmod(fd, 0o600)
+        except (AttributeError, OSError):
+            pass
         with os.fdopen(fd, "w") as fh:
             json.dump(dict(tokens, key=_token_key(cookies), at=time.time()), fh)
         os.replace(tmp, TOKENS_FILE)
