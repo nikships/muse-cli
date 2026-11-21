@@ -9,6 +9,7 @@ instead; it prints those steps when something is missing.
 Then: muse-cli status | muse-cli threads | muse-cli history | muse-cli send "hello" | ...
 """
 import argparse
+import hashlib
 import json
 import os
 import re
@@ -18,12 +19,15 @@ import time
 import urllib.parse
 
 from . import __version__, browsers
-from .gateway import Gateway, AuthError, GatewayError, load_cookies
+from .gateway import (Gateway, AuthError, GatewayError, fetch_access_token, fetch_hatch_token,
+                      fetch_session_info, load_cookies)
 from .update import cmd_update, finish_update_check, start_update_check
 
 CONFIG_DIR = os.path.expanduser("~/.config/muse-cli")
 CONFIG_FILE = os.path.join(CONFIG_DIR, "config.json")
 COOKIES_FILE = os.path.join(CONFIG_DIR, "cookies.txt")
+TOKENS_FILE = os.path.join(CONFIG_DIR, "tokens.json")
+TOKEN_TTL = 15 * 60  # seconds a cached gateway token is tried before refetching
 
 
 def load_config():
@@ -58,7 +62,67 @@ def connect(cfg):
     cookies = load_cookies(cfg["cookies_file"])
     if not cookies.strip():
         raise AuthError(f"cookies file {cfg['cookies_file']} is empty; run `muse-cli auth export`")
-    return Gateway(cookies, vm_id=cfg.get("vm_id"))
+    # Three HTTPS round trips (session, auth/check, hatch/token) are most of a
+    # connect, about 2.3 s of 2.8 s, and their answers outlive one command.
+    # A stale cached token is refused fast (403 on the WebSocket upgrade), so
+    # anything but a timeout falls back to fetching fresh ones.
+    cached = _cached_tokens(cookies)
+    if cached and cfg.get("vm_id") in (None, cached["vm_id"]):
+        try:
+            return Gateway(cookies, **cached)
+        except TimeoutError:
+            raise
+        except Exception:
+            _drop_tokens()
+    vm_id = cfg.get("vm_id") or fetch_session_info(cookies)["vm_id"]
+    access_token = fetch_access_token(cookies)
+    hatch_token = fetch_hatch_token(cookies, access_token, vm_id)
+    gw = Gateway(cookies, vm_id=vm_id, access_token=access_token, hatch_token=hatch_token)
+    _save_tokens(cookies, {"vm_id": vm_id, "access_token": access_token, "hatch_token": hatch_token})
+    return gw
+
+
+def _token_key(cookies):
+    return hashlib.sha256(cookies.encode()).hexdigest()
+
+
+def _cached_tokens(cookies):
+    """Tokens from an earlier run with the same cookies, if young enough."""
+    try:
+        with open(TOKENS_FILE) as fh:
+            d = json.load(fh)
+        if d["key"] == _token_key(cookies) and 0 <= time.time() - d["at"] < TOKEN_TTL:
+            return {k: str(d[k]) for k in ("vm_id", "access_token", "hatch_token")}
+    except (OSError, ValueError, KeyError, TypeError):
+        pass
+    return None
+
+
+def _save_tokens(cookies, tokens):
+    # Same protection as cookies.txt: the tokens are a short-lived login.
+    try:
+        os.makedirs(CONFIG_DIR, exist_ok=True)
+        tmp = TOKENS_FILE + ".tmp"
+        fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+        # The mode above only applies when the tmp file is created. A tmp
+        # file left behind by a crashed run keeps its old mode, so enforce
+        # it on the open descriptor too.
+        try:
+            os.fchmod(fd, 0o600)
+        except (AttributeError, OSError):
+            pass
+        with os.fdopen(fd, "w") as fh:
+            json.dump(dict(tokens, key=_token_key(cookies), at=time.time()), fh)
+        os.replace(tmp, TOKENS_FILE)
+    except OSError:
+        pass
+
+
+def _drop_tokens():
+    try:
+        os.remove(TOKENS_FILE)
+    except OSError:
+        pass
 
 
 def out(obj):

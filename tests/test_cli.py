@@ -160,6 +160,75 @@ class AuthExportTest(unittest.TestCase):
         self.assertNotIn("remote debugging", str(cm.exception))
 
 
+class TokenCacheTest(unittest.TestCase):
+    """connect() reuses the last run's tokens instead of three HTTPS round trips."""
+
+    def setUp(self):
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        self.cfg = {"cookies_file": os.path.join(tmp.name, "cookies.txt")}
+        with open(self.cfg["cookies_file"], "w") as fh:
+            fh.write("hatch_sess=secret; datr=x")
+        for name, value in (("CONFIG_DIR", tmp.name),
+                            ("TOKENS_FILE", os.path.join(tmp.name, "tokens.json"))):
+            p = patch.object(cli, name, value)
+            p.start()
+            self.addCleanup(p.stop)
+        self.fetches = []
+        for name, value in (("fetch_session_info", {"vm_id": "vm1"}), ("fetch_access_token", "at"),
+                            ("fetch_hatch_token", "ht")):
+            p = patch.object(cli, name, side_effect=lambda *a, n=name, v=value: self.fetches.append(n) or v)
+            p.start()
+            self.addCleanup(p.stop)
+
+    def connect(self, gateway):
+        with patch.object(cli, "Gateway", gateway):
+            return cli.connect(dict(self.cfg))
+
+    def test_second_connect_skips_the_token_fetches(self):
+        gateway = MagicMock()
+        self.connect(gateway)
+        self.assertEqual(len(self.fetches), 3)
+        if os.name != "nt":
+            self.assertEqual(stat.S_IMODE(os.stat(cli.TOKENS_FILE).st_mode), 0o600)
+        self.connect(gateway)
+        self.assertEqual(len(self.fetches), 3)
+        gateway.assert_called_with("hatch_sess=secret; datr=x", vm_id="vm1",
+                                   access_token="at", hatch_token="ht")
+
+    def test_refused_cached_token_falls_back_to_fresh_ones(self):
+        self.connect(MagicMock())
+        gateway = MagicMock(side_effect=[RuntimeError("Refused WebSocket upgrade: 403"), MagicMock()])
+        self.connect(gateway)
+        self.assertEqual(len(self.fetches), 6)
+        self.assertEqual(gateway.call_count, 2)
+
+    def test_timeout_with_cached_token_is_not_retried(self):
+        self.connect(MagicMock())
+        with self.assertRaises(TimeoutError):
+            self.connect(MagicMock(side_effect=TimeoutError("gateway connect timed out")))
+        self.assertEqual(len(self.fetches), 3)
+
+    def test_old_or_foreign_tokens_are_ignored(self):
+        self.connect(MagicMock())
+        with patch.object(cli.time, "time", return_value=cli.time.time() + cli.TOKEN_TTL + 1):
+            self.connect(MagicMock())
+        self.assertEqual(len(self.fetches), 6)
+        with open(self.cfg["cookies_file"], "w") as fh:
+            fh.write("hatch_sess=someone-else; datr=y")
+        self.connect(MagicMock())
+        self.assertEqual(len(self.fetches), 9)
+
+    def test_pinned_vm_id_skips_a_cache_for_another_vm(self):
+        self.connect(MagicMock())
+        cfg = dict(self.cfg, vm_id="other-vm")
+        with patch.object(cli, "Gateway", MagicMock()) as gateway:
+            cli.connect(cfg)
+        self.assertEqual(len(self.fetches), 5)
+        gateway.assert_called_with("hatch_sess=secret; datr=x", vm_id="other-vm",
+                                   access_token="at", hatch_token="ht")
+
+
 @unittest.skipIf(os.name == "nt", "a closed pipe is not a BrokenPipeError on Windows")
 class BrokenPipeTest(unittest.TestCase):
     def run_with_closed_reader(self, rows, close_first):

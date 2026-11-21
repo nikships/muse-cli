@@ -11,6 +11,7 @@ uv.lock
 cookies.txt
 agent-cookies.json
 config.json
+tokens.json
 *.har
 
 # OS
