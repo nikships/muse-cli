@@ -194,7 +194,14 @@ chat / feed / goals / ideas / sessions / ...
   keys and keychain failures per browser to avoid repeated prompts.
   Select only host keys `muse.ai` and `.muse.ai`: subdomain-only cookies are
   not valid for the CLI's requests to `https://muse.ai/api/`.
-- Elsewhere (and with `--browser agent-browser`) `auth export` reads cookies
+- `auth export` reads Firefox on every system (after Chromium on macOS):
+  `<profiles root>/*/cookies.sqlite`, table `moz_cookies`, plain `value`,
+  host `muse.ai`/`.muse.ai`, `originAttributes = ''` (default container).
+  `expiry` is milliseconds in current Firefox, seconds in older releases.
+  Roots: `%APPDATA%\Mozilla\Firefox\Profiles`, `~/Library/Application
+  Support/Firefox/Profiles`, `~/.mozilla/firefox` (plus snap and flatpak).
+  The newest unexpired `hatch_sess` across profiles wins.
+- Without those (and with `--browser agent-browser`) `auth export` reads cookies
   from the user's own Google Chrome through agent-browser `--auto-connect`.
   Chrome 144+ shares that profile only after remote debugging is enabled at
   `chrome://inspect/#remote-debugging`. That export follows the active tab, so

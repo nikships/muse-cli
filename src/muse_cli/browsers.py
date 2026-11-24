@@ -1,11 +1,17 @@
-"""Read the muse.ai login straight from a Chromium browser's cookie store on macOS.
+"""Read the muse.ai login straight from a browser's cookie store.
 
-Chromium keeps cookies in a SQLite file. Values are AES-128-CBC encrypted with
-a key derived from the browser's "Safe Storage" password in the login
-keychain, so macOS asks the user once before `security` may read it. Nothing
-here needs Node.js or a debugging port, and the browser can stay closed.
+Firefox, on every system: cookies.sqlite holds plain values, so nothing needs
+decrypting.
+
+Chromium browsers, macOS only: values are AES-128-CBC encrypted with a key
+derived from the browser's "Safe Storage" password in the login keychain, so
+macOS asks the user once before `security` may read it. (Windows Chromium uses
+app-bound encryption that only the browser itself can undo.)
+
+Nothing here needs Node.js or a debugging port, and the browser can stay closed.
 """
 import ctypes
+import glob
 import hashlib
 import os
 import shutil
@@ -27,6 +33,12 @@ BROWSERS = {
 }
 
 KEYCHAIN_WAIT = 120   # seconds; macOS shows an Allow dialog the first time
+
+CHROMIUM_SQL = ("SELECT host_key, name, path, is_secure, expires_utc, value, encrypted_value "
+                "FROM cookies WHERE host_key IN ('muse.ai', '.muse.ai')")
+# Default container only: container tabs keep a second copy of each cookie.
+FIREFOX_SQL = ("SELECT host, name, path, isSecure, expiry, value FROM moz_cookies "
+               "WHERE host IN ('muse.ai', '.muse.ai') AND originAttributes = ''")
 
 
 class BrowserCookieError(RuntimeError):
@@ -72,8 +84,53 @@ def _file_stamp(path):
     return s.st_ino, s.st_size, s.st_mtime_ns, s.st_ctime_ns
 
 
-def _muse_rows(path):
-    """Encrypted muse.ai rows from a copy of the database (the browser locks the original)."""
+def firefox_roots():
+    """Directories that hold Firefox profile folders on this system."""
+    if sys.platform == "win32":
+        return [os.path.join(os.environ.get("APPDATA", ""), "Mozilla", "Firefox", "Profiles")]
+    if sys.platform == "darwin":
+        return [os.path.join(SUPPORT, "Firefox", "Profiles")]
+    home = os.path.expanduser("~")
+    return [os.path.join(home, rel) for rel in (
+        ".mozilla/firefox", "snap/firefox/common/.mozilla/firefox",
+        ".var/app/org.mozilla.firefox/.mozilla/firefox")]
+
+
+def _firefox_expires(expiry):
+    # Newer Firefox stores milliseconds, older seconds; 0 marks a session cookie.
+    return int(expiry / 1000 if expiry > 1e11 else expiry or 0)
+
+
+def read_firefox_cookies():
+    """(jar, source) from the Firefox profile with the newest muse.ai login."""
+    paths = sorted(p for root in firefox_roots()
+                   for p in glob.glob(os.path.join(glob.escape(root), "*", "cookies.sqlite")))
+    if not paths:
+        raise BrowserCookieError("no Firefox profile found")
+    now = time.time()
+    best, errors = None, []
+    for path in paths:
+        try:
+            rows = _muse_rows(path, FIREFOX_SQL)
+        except BrowserCookieError as e:
+            errors.append(str(e))
+            continue
+        jar = [{"name": name, "domain": host, "path": cpath or "/", "secure": bool(secure),
+                "expires": _firefox_expires(expiry), "value": value or ""}
+               for host, name, cpath, secure, expiry, value in rows]
+        jar = [c for c in jar if not c["expires"] or c["expires"] > now]
+        sess = [c["expires"] or float("inf") for c in jar if c["name"] == "hatch_sess" and c["value"]]
+        if sess and (best is None or max(sess) > best[0]):
+            best = (max(sess), jar, path)
+    if best:
+        return best[1], f"firefox ({os.path.basename(os.path.dirname(best[2]))})"
+    if errors:
+        raise BrowserCookieError("; ".join(errors))
+    raise BrowserCookieError("no muse.ai login (hatch_sess) in Firefox")
+
+
+def _muse_rows(path, sql=CHROMIUM_SQL):
+    """muse.ai rows from a copy of the database (the browser locks the original)."""
     paths = [path, path + "-wal", path + "-journal"]
     try:
         for _ in range(3):
@@ -92,9 +149,7 @@ def _muse_rows(path):
                     continue
                 db = sqlite3.connect(copy)
                 try:
-                    return db.execute(
-                        "SELECT host_key, name, path, is_secure, expires_utc, value, encrypted_value "
-                        "FROM cookies WHERE host_key IN ('muse.ai', '.muse.ai')").fetchall()
+                    return db.execute(sql).fetchall()
                 finally:
                     db.close()
     except (OSError, sqlite3.Error) as e:
@@ -156,10 +211,26 @@ def read_cookies(browser="auto", key_for=_safe_storage_key, decrypt=_aes_cbc_dec
     jar entries match what `auth export` writes: name, value, domain, path,
     secure, expires. The keychain is asked only once a profile with an
     unexpired `hatch_sess` row is found, so a browser without a muse.ai login never
-    triggers a prompt. Raises BrowserCookieError with a reason otherwise.
+    triggers a prompt. `auto` tries Chromium browsers first on macOS, then
+    Firefox. Raises BrowserCookieError with a reason otherwise.
     """
+    if browser == "firefox" or (browser == "auto" and not supported()):
+        return read_firefox_cookies()
     if not supported():
-        raise BrowserCookieError("reading browser cookies directly is macOS-only")
+        raise BrowserCookieError("reading Chromium browsers directly is macOS-only; "
+                                 "use --browser firefox or agent-browser")
+    try:
+        return _read_chromium(browser, key_for, decrypt)
+    except BrowserCookieError as e:
+        if browser != "auto":
+            raise
+        try:
+            return read_firefox_cookies()
+        except BrowserCookieError as ff:
+            raise BrowserCookieError(f"{e}; {ff}") from None
+
+
+def _read_chromium(browser, key_for, decrypt):
     names = None if browser == "auto" else [browser]
     stores = cookie_stores(names)
     if not stores:

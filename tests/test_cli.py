@@ -41,6 +41,8 @@ class AuthExportTest(unittest.TestCase):
                 with patch.object(cli, "CONFIG_DIR", tmp), \
                         patch.object(cli, "COOKIES_FILE", cookies), \
                         patch.object(cli.browsers, "supported", return_value=False), \
+                        patch.object(cli.browsers, "read_cookies",
+                                     side_effect=browsers.BrowserCookieError("none")), \
                         patch.object(cli.shutil, "which", return_value="/bin/agent-browser"), \
                         patch.object(cli, "_browser_cookies", return_value=(jar, None)):
                     cli.cmd_auth_export(None)
@@ -59,6 +61,8 @@ class AuthExportTest(unittest.TestCase):
             with patch.object(cli, "CONFIG_DIR", tmp), \
                     patch.object(cli, "COOKIES_FILE", cookies), \
                     patch.object(cli.browsers, "supported", return_value=False), \
+                    patch.object(cli.browsers, "read_cookies",
+                                 side_effect=browsers.BrowserCookieError("none")), \
                     patch.object(cli.shutil, "which", return_value="/bin/agent-browser"), \
                     patch.object(cli, "_browser_cookies", return_value=(jar, None)):
                 with self.assertRaises(SystemExit) as ctx:
@@ -142,13 +146,13 @@ class AuthExportTest(unittest.TestCase):
 
     def test_named_browser_is_rejected_off_macos(self):
         with tempfile.TemporaryDirectory() as tmp:
-            cookies, args = self.export(tmp, "chrome", [])
+            cookies, args = self.export(tmp, "chrome", [browsers.BrowserCookieError(
+                "reading Chromium browsers directly is macOS-only")])
             cli.browsers.supported.return_value = False
             with patch("sys.stderr", new_callable=io.StringIO) as err, \
                     self.assertRaises(SystemExit):
                 cli.cmd_auth_export(args)
             self.assertIn("macOS-only", err.getvalue())
-            cli.browsers.read_cookies.assert_not_called()
             cli._browser_cookies.assert_not_called()
             self.assertFalse(os.path.exists(cookies))
 

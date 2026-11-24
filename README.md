@@ -62,6 +62,22 @@ read it), and after that talks to muse.ai directly. Access tokens are reused
 for up to 15 minutes (`tokens.json`, mode `600`), so commands start fast. When a command later says the cookies expired, repeat
 this section.
 
+### Easiest, on any system: Firefox
+
+1. Log in at https://muse.ai/ in Firefox.
+2. Run:
+
+```bash
+muse-cli auth export
+muse-cli status
+```
+
+Firefox keeps cookies unencrypted, so nothing else is needed: no Node.js, no
+debugging port, no keychain prompt, and Firefox can stay open. Success looks
+like `saved 10 muse.ai cookies to ... (from firefox (abc123.default-release))`.
+Every Firefox profile is checked and the newest login wins. Container tabs and
+private windows are not read. Force this route with `--browser firefox`.
+
 ### On a Mac (Chrome, Brave, Arc, Edge or Chromium)
 
 1. Log in at https://muse.ai/ in your browser.
@@ -95,10 +111,11 @@ disk as it was. `muse-cli status` then prints JSON with your VM id, how many
 chats you have, the unread count, and your identity. That means install and
 login both worked.
 
-### Linux, Windows, or Safari: agent-browser or by hand
+### Chrome on Linux or Windows, or Safari: agent-browser or by hand
 
-Direct reading is macOS-only and covers Chromium browsers, not Safari.
-Elsewhere (or with `muse-cli auth export --browser agent-browser`) the login
+Direct reading of Chromium browsers is macOS-only (Windows Chrome uses
+app-bound encryption), and Safari is not supported. Without a Firefox login
+(or with `muse-cli auth export --browser agent-browser`) the login
 is read from a running Google Chrome through [agent-browser](https://github.com/vercel-labs/agent-browser).
 Do the steps in order. Each one checks itself before you continue.
 
@@ -187,7 +204,7 @@ muse-cli status
 muse-cli                                          # full-screen app on a terminal with Bun, else the plain chat
 muse-cli tui                                      # the full-screen app (`--demo`: made-up data, no account)
 muse-cli chat                                     # plain line-by-line chat
-muse-cli auth export --browser auto               # import the browser login (macOS: direct read)
+muse-cli auth export --browser auto               # import the browser login (Firefox anywhere, Chromium on macOS)
 muse-cli threads                                  # main chat + side chats
 muse-cli history --limit 5                        # recent messages
 muse-cli history --thread <session-id> --limit 5  # one side chat
@@ -318,7 +335,7 @@ src/muse_cli/
   tui/               the full-screen app: TypeScript on OpenTUI and Bun
   bridge.py          JSON-lines bridge the app talks to muse.ai through
   demo.py            made-up data for `muse-cli tui --demo`
-  browsers.py        reads the muse.ai login from Chromium browsers on macOS
+  browsers.py        reads the muse.ai login from Firefox, or Chromium browsers on macOS
   gateway.py         gateway client (auth, Noise transport, subscriptions)
   update.py          daily update notice and `muse-cli update`
   skill.py           installs and refreshes the bundled agent skill
@@ -338,9 +355,10 @@ release flow and contributor notes. Merging to `main` publishes a release.
 - Login is the [Log in once](#log-in-once) section above. Cookies live at
   `~/.config/muse-cli/cookies.txt` (mode 600). Access and gateway tokens are
   cached in `tokens.json` (mode 600) for 15 minutes and refetched when refused.
-- On macOS, `auth export` decrypts the muse.ai cookies from the browser's own
-  cookie file, using the browser's Safe Storage key from your login keychain.
-  Elsewhere it reads Google Chrome through
+- On every system, `auth export` reads Firefox's `cookies.sqlite`, which holds
+  plain values. On macOS it first decrypts the muse.ai cookies from Chromium
+  browsers' cookie files, using the browser's Safe Storage key from your login
+  keychain. Without either login it reads Google Chrome through
   [agent-browser](https://github.com/vercel-labs/agent-browser), which needs
   Chrome open with remote debugging on (`chrome://inspect/#remote-debugging`)
   and a logged-in muse.ai tab in front.
