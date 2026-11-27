@@ -50,7 +50,23 @@ class ReadCookiesTest(unittest.TestCase):
         p = patch("time.time", return_value=1700000000)
         p.start()
         self.addCleanup(p.stop)
+        # Never fall back to the real Firefox profiles of whoever runs the tests.
+        self.ff_root = os.path.join(self.tmp.name, "firefox")
+        p = patch.object(browsers, "firefox_roots", return_value=[self.ff_root])
+        p.start()
+        self.addCleanup(p.stop)
         self.asked = []
+
+    def firefox(self, profile, rows, origin=""):
+        path = os.path.join(self.ff_root, profile, "cookies.sqlite")
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        db = sqlite3.connect(path)
+        db.execute("CREATE TABLE IF NOT EXISTS moz_cookies (originAttributes TEXT NOT NULL DEFAULT '', "
+                   "name TEXT, value TEXT, host TEXT, path TEXT, expiry INTEGER, isSecure INTEGER)")
+        db.executemany("INSERT INTO moz_cookies VALUES (?,?,?,?,?,?,?)",
+                       [(origin, n, v, h, "/", e, 1) for h, n, v, e in rows])
+        db.commit()
+        db.close()
 
     def key_for(self, service, account):
         self.asked.append(service)
@@ -285,10 +301,50 @@ class ReadCookiesTest(unittest.TestCase):
         with self.assertRaisesRegex(browsers.BrowserCookieError, "garbage"):
             self.read()
 
-    def test_refuses_off_macos(self):
+    def test_refuses_chromium_off_macos(self):
         with patch.object(browsers, "supported", return_value=False):
             with self.assertRaisesRegex(browsers.BrowserCookieError, "macOS-only"):
-                self.read()
+                self.read("chrome")
+
+    def test_firefox_reads_plain_values_with_ms_or_s_expiry(self):
+        self.firefox("abc.default", [
+            (".muse.ai", "hatch_sess", "SESS", 1800000000000),   # milliseconds
+            ("muse.ai", "hatch_native_auth_device", "DEV", 1800000000),   # seconds
+            ("muse.ai", "old", "X", 1600000000000),
+            ("www.muse.ai", "sub", "Y", 1800000000),
+            ("other.com", "hatch_sess", "NO", 1800000000),
+        ])
+        for browser, platform_ok in (("firefox", True), ("auto", False)):
+            with self.subTest(browser=browser), \
+                    patch.object(browsers, "supported", return_value=platform_ok):
+                jar, source = self.read(browser)
+                self.assertEqual(source, "firefox (abc.default)")
+                self.assertEqual({c["name"]: (c["value"], c["expires"]) for c in jar},
+                                 {"hatch_sess": ("SESS", 1800000000),
+                                  "hatch_native_auth_device": ("DEV", 1800000000)})
+        self.assertEqual(self.asked, [])
+
+    def test_firefox_picks_newest_login_and_skips_containers(self):
+        self.firefox("a.old", [(".muse.ai", "hatch_sess", "OLD", 1750000000)])
+        self.firefox("b.new", [(".muse.ai", "hatch_sess", "NEW", 1800000000)])
+        self.firefox("c.box", [(".muse.ai", "hatch_sess", "BOX", 1900000000)],
+                     origin="^userContextId=1")
+        jar, source = self.read("firefox")
+        self.assertEqual((jar[0]["value"], source), ("NEW", "firefox (b.new)"))
+
+    def test_firefox_without_login_or_profile(self):
+        with self.assertRaisesRegex(browsers.BrowserCookieError, "no Firefox profile"):
+            self.read("firefox")
+        self.firefox("a.default", [(".muse.ai", "hatch_sess", "", 1800000000)])
+        with self.assertRaisesRegex(browsers.BrowserCookieError, "no muse.ai login .* Firefox"):
+            self.read("firefox")
+
+    def test_auto_on_macos_falls_back_to_firefox(self):
+        self.firefox("a.default", [(".muse.ai", "hatch_sess", "FF", 1800000000)])
+        jar, source = self.read()
+        self.assertEqual((jar[0]["value"], source), ("FF", "firefox (a.default)"))
+        with self.assertRaisesRegex(browsers.BrowserCookieError, "no brave profile"):
+            self.read("brave")
 
 
 class KeychainTest(unittest.TestCase):

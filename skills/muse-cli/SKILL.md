@@ -39,6 +39,12 @@ The CLI stores the user's muse.ai browser login at
 cached for 15 minutes in `tokens.json` (mode 0600) and refetched when refused. When a later command fails
 with `auth error`, the cookies expired: repeat this step.
 
+Easiest on any system: if the user uses Firefox, ask them to log in at
+https://muse.ai/ there and confirm, then run `muse-cli auth export` (no
+prompt, no Node.js; Firefox may stay open). Success ends with
+`(from firefox (<profile>))`. Force it with `--browser firefox`. Plain
+`auth export` already tries Firefox, after Chromium browsers on macOS.
+
 ### 2a. macOS: read the browser directly (try this first)
 
 Needs no Node.js and no debugging port. The user must be logged in at
@@ -69,7 +75,8 @@ cookie values are never printed; do not print the cookies file either.
 - Only cookies valid for `muse.ai` are exported, not subdomain-only cookies.
 - `cookie database changed while reading ...`: close that browser and rerun
   once. The command retries a changing database at most three times.
-- On Linux or Windows, or if the Mac route is not possible, use 2b.
+- On Linux or Windows without a Firefox login, or if the Mac route is not
+  possible, use 2b.
 
 ### 2b. Other systems: cookie reader (agent-browser)
 

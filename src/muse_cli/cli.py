@@ -325,9 +325,14 @@ def _browser_cookies():
 def _print_need_browser_login(err):
     print(f"Could not read a muse.ai login from your browser: {err}", file=sys.stderr)
     print(file=sys.stderr)
-    print("Log in at https://muse.ai/ in Chrome, Brave, Arc or Edge, then run", file=sys.stderr)
-    print("`muse-cli auth export` again. macOS may ask to let `security` use", file=sys.stderr)
-    print("the browser's Safe Storage key; click Allow.", file=sys.stderr)
+    if browsers.supported():
+        print("Log in at https://muse.ai/ in Firefox, Chrome, Brave, Arc or Edge, then run", file=sys.stderr)
+        print("`muse-cli auth export` again. macOS may ask to let `security` use", file=sys.stderr)
+        print("the browser's Safe Storage key; click Allow.", file=sys.stderr)
+    else:
+        print("Log in at https://muse.ai/ in Firefox, then run `muse-cli auth export` again.",
+              file=sys.stderr)
+        print("Firefox can stay open, and nothing else needs installing.", file=sys.stderr)
     print(file=sys.stderr)
     _print_hand_copy()
 
@@ -336,7 +341,7 @@ def cmd_auth_export(args):
     os.makedirs(CONFIG_DIR, exist_ok=True)
     choice = getattr(args, "browser", None) or "auto"
     jar, source = None, "Chrome"
-    if choice != "agent-browser" and browsers.supported():
+    if choice != "agent-browser":
         print("Reading muse.ai cookies from your browser...", file=sys.stderr)
         try:
             jar, source = browsers.read_cookies(choice)
@@ -348,10 +353,6 @@ def cmd_auth_export(args):
                 _print_need_browser_login(e)
                 sys.exit(1)
             print(f"({e}; trying agent-browser)", file=sys.stderr)
-    elif choice not in ("auto", "agent-browser"):
-        print("cookie export failed: reading browser cookies directly is macOS-only; "
-              "use --browser agent-browser", file=sys.stderr)
-        sys.exit(1)
     if jar is None:
         if shutil.which("agent-browser") is None:
             _print_need_agent_browser()
@@ -1218,16 +1219,19 @@ def build_parser():
         "Copy your muse.ai login out of your browser into\n"
         "~/.config/muse-cli/cookies.txt (mode 600).\n"
         "\n"
-        "On macOS it reads the cookies of Chrome, Brave, Arc, Edge or Chromium\n"
-        "directly: log in at https://muse.ai/ once, then run this command.\n"
-        "macOS asks once to let `security` use the browser's Safe Storage key;\n"
-        "click Allow. No Node.js or debugging port is needed, and the browser\n"
-        "can be closed.\n"
+        "Easiest on every system: log in at https://muse.ai/ in Firefox, then run\n"
+        "this command. Nothing else needs installing, and Firefox can stay open.\n"
+        "\n"
+        "On macOS it also reads Chrome, Brave, Arc, Edge or Chromium directly\n"
+        "(tried before Firefox). macOS asks once to let `security` use the\n"
+        "browser's Safe Storage key; click Allow. No Node.js or debugging port\n"
+        "is needed, and the browser can be closed.\n"
         "Unreadable profiles are skipped if another has a usable login.\n"
         "Subdomain-only cookies are not exported.\n"
         "Empty or expired login cookies never replace a saved login.\n"
         "\n"
-        "Elsewhere, or with --browser agent-browser, it reads Google Chrome through\n"
+        "Without a Firefox login (and on macOS no Chromium one), or with\n"
+        "--browser agent-browser, it reads Google Chrome through\n"
         "agent-browser. Chrome shares those cookies only after remote debugging is on.\n"
         "In the Chrome window you already use for muse.ai:\n"
         "\n"
@@ -1251,9 +1255,9 @@ def build_parser():
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     p.add_argument("--browser", default="auto",
-                   choices=["auto", *browsers.BROWSERS, "agent-browser"],
-                   help="where to read the login (default: auto = any logged-in "
-                        "Chromium browser on macOS, else agent-browser)")
+                   choices=["auto", "firefox", *browsers.BROWSERS, "agent-browser"],
+                   help="where to read the login (default: auto = Chromium browsers "
+                        "on macOS, then Firefox, then agent-browser)")
     p.set_defaults(fn=cmd_auth_export)
 
     sub.add_parser("chat", help="plain line-by-line chat (the default with no command "

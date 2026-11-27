@@ -19,10 +19,10 @@ Noise-XX WebSocket to the user's personal VM, carrying protobuf envelopes.
 ## Repository map
 
 - `src/muse_cli/cli.py`: argparse setup (`main()`), every `cmd_*` command,
-  config loading, and `auth export` (direct browser read on macOS,
+  config loading, and `auth export` (direct Firefox read anywhere, Chromium on macOS,
   `agent-browser` elsewhere).
-- `src/muse_cli/browsers.py`: macOS-only direct read of the muse.ai login from
-  Chromium browsers' cookie databases (`auth export`), no network.
+- `src/muse_cli/browsers.py`: direct read of the muse.ai login from Firefox (any OS) or
+  Chromium browsers on macOS (`auth export`), no network.
 - `src/muse_cli/gateway.py`: `Gateway` client (tokens, Noise transport,
   request/subscribe/download), `AuthError`, `GatewayError`, `load_cookies`.
 - `src/muse_cli/chat.py`: the plain interactive REPL (`muse-cli chat`, and
